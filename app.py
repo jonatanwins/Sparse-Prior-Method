@@ -152,7 +152,7 @@ def experiment_2():
         simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
     )
 
-    # plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+    plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
 
     # Fourier Transform of the composite waveforms
     N = len(t)
@@ -173,6 +173,58 @@ def experiment_2():
     plt.grid()
     plt.show()
 
+def experiment_3():
+    array_size = 8
+    microphone_spacing = 0.1
+    x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
+
+    sources = [
+        SoundSource(distance=2.0, angle=np.pi / 4, frequency=100, amplitude=1.0),
+        SoundSource(distance=2.0, angle=np.pi / 3, frequency=150, amplitude=.8),
+    ]
+
+    t, composite_waveforms, individual_waveforms, delays_dict = (
+        simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
+    )
+
+    plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+
+    # Fourier Transform of the composite waveforms
+    N = len(t)
+    frequency_spectrum = fft(composite_waveforms, axis=1)
+    fft_frequencies = fftfreq(N, d=t[1] - t[0])
+
+    # Frequency of interest
+    f0 = 100
+    omega = 2 * np.pi * f0
+
+    # C(omega) matrix
+    num_mics = array_size
+    num_sources = len(sources)
+    # print(f'{x_mics=}, {x_mics.shape=}')
+    C = np.zeros((num_mics, num_sources), dtype=complex)
+
+    print(delays_dict)
+
+    for i in range(num_mics):
+        for j, source in enumerate(sources):
+            C[i, j] = ...
+
+
+
+    # Plot the frequency spectrum for each microphone
+    plt.figure(figsize=(12, 6))
+    for i in range(composite_waveforms.shape[0]):
+        plt.scatter(fft_frequencies, frequency_spectrum[i], label=f"Mic {i+1}")
+
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Amplitude")
+    plt.title("Frequency Spectrum of Composite Waveforms (Positive Frequencies)")
+    plt.legend()
+    plt.xlim(-400, 400)
+    plt.grid()
+    plt.show()
+
 
 if __name__ == "__main__":
-    experiment_2()
+    experiment_3()

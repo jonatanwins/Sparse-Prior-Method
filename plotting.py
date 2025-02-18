@@ -167,18 +167,18 @@ def plot_geometry(ax, x_positions, y_positions, sources):
     # Determine required span to make the plot square
     x_span = x_max - x_min
     y_span = y_max - y_min
-    print(f"{x_max=}, {x_min=}, {y_max=}, {y_min}")
-    print([src.get_position() for src in sources])
+    # print(f"{x_max=}, {x_min=}, {y_max=}, {y_min}")
+    # print([src.get_position() for src in sources])
     max_span = max(x_span, y_span)
 
-    # We'll pad by 10%
+    # Pad by 10%
     pad_factor = 0.2
     half_span = 1.5 * max_span * (1 + pad_factor)
 
     # Final limits
     ax.set_xlim(-half_span, half_span)
     ax.set_ylim(-half_span, half_span)
-    print(f"{half_span=}")
+    # print(f"{half_span=}")
 
     # quick fix, something weird about xlim on plots straight to axis
     # ax.set_xlim(-5, 5)
