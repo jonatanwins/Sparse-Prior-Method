@@ -103,9 +103,9 @@ def simulate_waveforms_multiple_sources(
             x_positions, y_positions, source, t
         )  # same t
         composite_waveforms += waveform
-        individual_waveforms[f"Source {idx+1}"] = waveform
+        individual_waveforms[idx + 1] = waveform
         # TODO maybe cut the Source in the name
-        delays_dict[f"Source {idx+1}"] = delays
+        delays_dict[idx + 1] = delays
 
     return t, composite_waveforms, individual_waveforms, delays_dict
 
@@ -208,7 +208,7 @@ def experiment_3():
     # print(f'{x_mics=}, {x_mics.shape=}')
     C = np.zeros((num_mics, num_sources), dtype=complex)
 
-    print(delays_dict["Source 1"])
+    print(delays_dict[1])
 
     # TODO imaginary unit
     # Define imaginary unit
@@ -216,15 +216,13 @@ def experiment_3():
 
     for i in range(num_mics):
         for j, source in enumerate(sources):
-            C[i, j] = np.exp(
-                -j_imag * source.frequency * delays_dict[f"Source {j+1}"][i]
-            )
+            C[i, j] = np.exp(-j_imag * source.frequency * delays_dict[j + 1][i])
             # TODO add attenuation as 1/d_{ij}
 
     # Plot the frequency spectrum for each microphone
     plt.figure(figsize=(12, 6))
     for i in range(composite_waveforms.shape[0]):
-        plt.scatter(fft_frequencies, frequency_spectrum[i], label=f"Mic {i+1}")
+        plt.plot(fft_frequencies, frequency_spectrum[i], label=f"Mic {i+1}")
 
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Amplitude")
