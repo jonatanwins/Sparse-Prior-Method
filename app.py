@@ -70,8 +70,9 @@ def simulate_waveform_for_source(x_positions, y_positions, source, t):
     delays = calculate_delays(x_positions, y_positions, source)
     phase_shifts = (
         2 * np.pi * source.frequency * delays
-    )  # angle frequency times respective delaya
+    )  # angle frequency times respective delay
 
+    # at the microphone, hence the shift
     waveforms = np.array(
         [
             source.amplitude * np.sin(2 * np.pi * source.frequency * t + shift)
@@ -104,7 +105,6 @@ def simulate_waveforms_multiple_sources(
         )  # same t
         composite_waveforms += waveform
         individual_waveforms[idx + 1] = waveform
-        # TODO maybe cut the Source in the name
         delays_dict[idx + 1] = delays
 
     return t, composite_waveforms, individual_waveforms, delays_dict
@@ -175,11 +175,12 @@ def experiment_2():
     plt.show()
 
 
-def experiment_3():
+def experiment_3(plot=False):
     array_size = 8
     microphone_spacing = 0.1
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
+    # Frequency of interest
     frequency = 100
 
     sources = [
@@ -191,34 +192,44 @@ def experiment_3():
         simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
     )
 
-    # plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+    if plot:
+        plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
 
     # Fourier Transform of the composite waveforms
     N = len(t)
     frequency_spectrum = fft(composite_waveforms, axis=1)
     fft_frequencies = fftfreq(N, d=t[1] - t[0])
 
-    # Frequency of interest
-    f0 = 100
-    omega = 2 * np.pi * f0
+    omega = 2 * np.pi * frequency
 
     # C(omega) matrix
     num_mics = array_size
     num_sources = len(sources)
-    # print(f'{x_mics=}, {x_mics.shape=}')
     C = np.zeros((num_mics, num_sources), dtype=complex)
 
-    print(delays_dict[1])
-
-    # TODO imaginary unit
-    # Define imaginary unit
-    j_imag = 1j
+    print(f"{delays_dict[1]=}")
 
     for i in range(num_mics):
         for j, source in enumerate(sources):
-            C[i, j] = np.exp(-j_imag * source.frequency * delays_dict[j + 1][i])
+            C[i, j] = np.exp(-1j * omega * delays_dict[j + 1][i])
             # TODO add attenuation as 1/d_{ij}
 
+    Y = frequency_spectrum
+
+    # the time signal at the source, before any phaseshifting
+    x = np.array([source.amplitude * np.sin(omega * t) for source in sources])
+    X = fft(x, axis=1)
+
+
+    # print(f"{C.shape=}")
+    # print(f"{Y.shape=}")
+    # print(f"{X.shape=}")
+    # print(f"{t.shape=}")
+
+    print(f"{C.dot(X)[0][0]=}")
+    print(f"{Y[0][0]=}")
+
+    
     # Plot the frequency spectrum for each microphone
     plt.figure(figsize=(12, 6))
     for i in range(composite_waveforms.shape[0]):
@@ -230,7 +241,7 @@ def experiment_3():
     plt.legend()
     plt.xlim(-400, 400)
     plt.grid()
-    plt.show()
+    # plt.show()
 
 
 if __name__ == "__main__":
