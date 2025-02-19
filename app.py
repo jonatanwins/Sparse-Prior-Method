@@ -104,6 +104,7 @@ def simulate_waveforms_multiple_sources(
         )  # same t
         composite_waveforms += waveform
         individual_waveforms[f"Source {idx+1}"] = waveform
+        # TODO maybe cut the Source in the name
         delays_dict[f"Source {idx+1}"] = delays
 
     return t, composite_waveforms, individual_waveforms, delays_dict
@@ -173,21 +174,24 @@ def experiment_2():
     plt.grid()
     plt.show()
 
+
 def experiment_3():
     array_size = 8
     microphone_spacing = 0.1
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
+    frequency = 100
+
     sources = [
-        SoundSource(distance=2.0, angle=np.pi / 4, frequency=100, amplitude=1.0),
-        SoundSource(distance=2.0, angle=np.pi / 3, frequency=150, amplitude=.8),
+        SoundSource(distance=2.0, angle=np.pi / 4, frequency=frequency, amplitude=1.0),
+        SoundSource(distance=2.0, angle=np.pi / 3, frequency=frequency, amplitude=0.8),
     ]
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
         simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
     )
 
-    plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+    # plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
 
     # Fourier Transform of the composite waveforms
     N = len(t)
@@ -204,13 +208,18 @@ def experiment_3():
     # print(f'{x_mics=}, {x_mics.shape=}')
     C = np.zeros((num_mics, num_sources), dtype=complex)
 
-    print(delays_dict)
+    print(delays_dict["Source 1"])
+
+    # TODO imaginary unit
+    # Define imaginary unit
+    j_imag = 1j
 
     for i in range(num_mics):
         for j, source in enumerate(sources):
-            C[i, j] = ...
-
-
+            C[i, j] = np.exp(
+                -j_imag * source.frequency * delays_dict[f"Source {j+1}"][i]
+            )
+            # TODO add attenuation as 1/d_{ij}
 
     # Plot the frequency spectrum for each microphone
     plt.figure(figsize=(12, 6))
@@ -219,7 +228,7 @@ def experiment_3():
 
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Amplitude")
-    plt.title("Frequency Spectrum of Composite Waveforms (Positive Frequencies)")
+    plt.title("Frequency Spectrum of Composite Waveforms")
     plt.legend()
     plt.xlim(-400, 400)
     plt.grid()
