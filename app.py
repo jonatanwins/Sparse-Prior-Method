@@ -181,11 +181,11 @@ def experiment_3(plot=False):
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
     # Frequency of interest
-    frequency = 100
+    f0 = 100
 
     sources = [
-        SoundSource(distance=2.0, angle=np.pi / 4, frequency=frequency, amplitude=1.0),
-        SoundSource(distance=2.0, angle=np.pi / 3, frequency=frequency, amplitude=0.8),
+        SoundSource(distance=2.0, angle=np.pi / 4, frequency=f0, amplitude=1.0),
+        SoundSource(distance=2.0, angle=np.pi / 3, frequency=f0, amplitude=0.8),
     ]
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
@@ -197,51 +197,40 @@ def experiment_3(plot=False):
 
     # Fourier Transform of the composite waveforms
     N = len(t)
-    frequency_spectrum = fft(composite_waveforms, axis=1)
+    frequency_spectrum = fft(composite_waveforms, axis=1)  # i.e. Y(omega)
     fft_frequencies = fftfreq(N, d=t[1] - t[0])
 
-    omega = 2 * np.pi * frequency
+    omega = 2 * np.pi * f0
 
     # C(omega) matrix
     num_mics = array_size
     num_sources = len(sources)
     C = np.zeros((num_mics, num_sources), dtype=complex)
 
-    print(f"{delays_dict[1]=}")
-
     for i in range(num_mics):
         for j, source in enumerate(sources):
             C[i, j] = np.exp(-1j * omega * delays_dict[j + 1][i])
             # TODO add attenuation as 1/d_{ij}
 
-    Y = frequency_spectrum
-
     # the time signal at the source, before any phaseshifting
     x = np.array([source.amplitude * np.sin(omega * t) for source in sources])
     X = fft(x, axis=1)
 
+    idx = np.argmin(np.abs(fft_frequencies - f0))
 
-    # print(f"{C.shape=}")
-    # print(f"{Y.shape=}")
-    # print(f"{X.shape=}")
-    # print(f"{t.shape=}")
+    Y_f0 = frequency_spectrum[:, idx]
+    X_f0 = X[:, idx]
 
-    print(f"{C.dot(X)[0][0]=}")
-    print(f"{Y[0][0]=}")
+    Y_pred_f0 = C.dot(X_f0)
 
-    
-    # Plot the frequency spectrum for each microphone
-    plt.figure(figsize=(12, 6))
-    for i in range(composite_waveforms.shape[0]):
-        plt.plot(fft_frequencies, frequency_spectrum[i], label=f"Mic {i+1}")
+    print(f"{X_f0.shape=}")
+    print(f"{X.shape=}")
+    print(f"{frequency_spectrum.shape=}")
+    print(f"{Y_f0.shape=}")
+    print(f"{Y_pred_f0.shape=}")
 
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Amplitude")
-    plt.title("Frequency Spectrum of Composite Waveforms")
-    plt.legend()
-    plt.xlim(-400, 400)
-    plt.grid()
-    # plt.show()
+    print(f"{Y_pred_f0=}")
+    print(f"{Y_f0=}")
 
 
 if __name__ == "__main__":
