@@ -1,6 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from plotting import plot_all
+from plotting import (
+    plot_overview,
+    plot_Y_comparison,
+    plot_complex_matrix,
+    plot_equation,
+)
 from scipy.fft import fft, ifft, fftfreq, fftshift
 
 
@@ -58,7 +63,7 @@ def calculate_delays(x_positions, y_positions, source: SoundSource):
     return delays
 
 
-def simulate_waveform_for_source(x_positions, y_positions, source, t):
+def simulate_waveform_for_source(x_positions, y_positions, source, t, cosine=False):
     """
     Compute the waveform at each microphone due to one sound source.
 
@@ -72,10 +77,12 @@ def simulate_waveform_for_source(x_positions, y_positions, source, t):
         2 * np.pi * source.frequency * delays
     )  # angle frequency times respective delay
 
+    f = np.cos if cosine else np.sin
+
     # at the microphone, hence the shift
     waveforms = np.array(
         [
-            source.amplitude * np.sin(2 * np.pi * source.frequency * t + shift)
+            source.amplitude * f(2 * np.pi * source.frequency * t + shift)
             for shift in phase_shifts
         ]
     )
@@ -84,7 +91,7 @@ def simulate_waveform_for_source(x_positions, y_positions, source, t):
 
 
 def simulate_waveforms_multiple_sources(
-    x_positions, y_positions, sources, sampling_rate=10_000, duration=None
+    x_positions, y_positions, sources, sampling_rate=10_000, duration=None, cosine=False
 ):
     """
     TODO
@@ -101,7 +108,7 @@ def simulate_waveforms_multiple_sources(
 
     for idx, source in enumerate(sources):
         waveform, delays = simulate_waveform_for_source(
-            x_positions, y_positions, source, t
+            x_positions, y_positions, source, t, cosine=cosine
         )  # same t
         composite_waveforms += waveform
         individual_waveforms[idx + 1] = waveform
@@ -135,7 +142,7 @@ def experiment_1():
         simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
     )
 
-    plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+    plot_overview(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
 
 
 def experiment_2():
@@ -153,7 +160,7 @@ def experiment_2():
         simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
     )
 
-    plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+    plot_overview(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
 
     # Fourier Transform of the composite waveforms
     N = len(t)
@@ -175,7 +182,7 @@ def experiment_2():
     plt.show()
 
 
-def experiment_3(plot=False):
+def experiment_3(plot=False, cosine=False):
     array_size = 8
     microphone_spacing = 0.1
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
@@ -189,11 +196,13 @@ def experiment_3(plot=False):
     ]
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
-        simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
+        simulate_waveforms_multiple_sources(x_mics, y_mics, sources, cosine=cosine)
     )
 
     if plot:
-        plot_all(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
+        plot_overview(
+            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+        )
 
     # Fourier Transform of the composite waveforms
     N = len(t)
@@ -202,9 +211,10 @@ def experiment_3(plot=False):
 
     omega = 2 * np.pi * f0
 
-    # C(omega) matrix
+    # C(omega) matrix for a specific angle frequency
     num_mics = array_size
     num_sources = len(sources)
+    # Bear in mind this is C_omega_0, C would be a cube
     C = np.zeros((num_mics, num_sources), dtype=complex)
 
     for i in range(num_mics):
@@ -217,21 +227,33 @@ def experiment_3(plot=False):
     X = fft(x, axis=1)
 
     idx = np.argmin(np.abs(fft_frequencies - f0))
+    print()
 
     Y_f0 = frequency_spectrum[:, idx]
     X_f0 = X[:, idx]
 
     Y_pred_f0 = C.dot(X_f0)
 
-    print(f"{X_f0.shape=}")
-    print(f"{X.shape=}")
-    print(f"{frequency_spectrum.shape=}")
-    print(f"{Y_f0.shape=}")
-    print(f"{Y_pred_f0.shape=}")
+    # print(f"{Y_pred_f0=}")
+    # print(f"{Y_f0=}")
+    print(f"{C.shape=}")
 
-    print(f"{Y_pred_f0=}")
-    print(f"{Y_f0=}")
+    plot_complex_matrix(Y_pred_f0)
+    plot_complex_matrix(Y_f0)
+    plot_equation(Y_pred_f0, C, X_f0)
+
+    # TODO Compressed sensing algoritme
+    # TODO invertere
 
 
 if __name__ == "__main__":
-    experiment_3()
+    B = np.array(
+        [
+            [-10, 3 + 3j, 10],
+            [1j, 1 - 1j, 5 + 5j],
+            [2j + 8, 8j - 2, 6 + 4j],
+        ]
+    )
+    # plot_complex_matrix_hsv(B, show_values=True)
+
+    experiment_3(cosine=True)

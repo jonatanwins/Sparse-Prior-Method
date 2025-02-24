@@ -1,8 +1,15 @@
 import matplotlib.pyplot as plt
+from matplotlib.colors import hsv_to_rgb
+
 from itertools import cycle
 import numpy as np
 
 colors = cycle(["#FFA343", "#FF1744", "#9A4DFF", "#00BFA5", "#3498DB"])
+yellow = "#FFA343"
+red = "#FF1744"
+purple = "#9A4DFF"
+green = "#00BFA5"
+blue = "#3498DB"
 
 
 # ------------------------
@@ -133,15 +140,15 @@ def plot_geometry(ax, x_positions, y_positions, sources):
         )
 
     # Plot origin
-    ax.scatter(
-        0,
-        0,
-        s=60,
-        marker="s",
-        color="black",
-        edgecolor="k",
-        label="Origin",
-    )
+    # ax.scatter(
+    #     0,
+    #     0,
+    #     s=60,
+    #     marker="s",
+    #     color="black",
+    #     edgecolor="k",
+    #     label="Origin",
+    # )
 
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
@@ -171,9 +178,9 @@ def plot_geometry(ax, x_positions, y_positions, sources):
     # print([src.get_position() for src in sources])
     max_span = max(x_span, y_span)
 
-    # Pad by 10%
+    # Pad by 10% (this is completely hacked atm)
     pad_factor = 0.2
-    half_span = 1.5 * max_span * (1 + pad_factor)
+    half_span = 1.2 * max_span * (1 + pad_factor)
 
     # Final limits
     ax.set_xlim(-half_span, half_span)
@@ -259,7 +266,7 @@ def plot_waveform_column(
         ax_source.legend(loc="upper right")
 
 
-def plot_all(
+def plot_overview(
     x_positions,
     y_positions,
     sources,
@@ -342,11 +349,175 @@ def plot_all(
         # Mic #0 in highlight color
         ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 1")
 
-        ax_source.set_title(f"{src_label} Waveforms")
+        ax_source.set_title(f"Source {src_label} Waveforms")
         ax_source.set_xlabel("Time (s)")
         ax_source.set_ylabel("Amplitude")
         ax_source.grid(True)
         ax_source.legend(loc="upper right")
 
     plt.tight_layout()
+    plt.show()
+
+
+def plot_Y_comparison(Y_f0, Y_pred_f0):
+    indices = np.arange(len(Y_f0))
+
+    # Determine colors based on the sign for real and imaginary parts.
+    colors_real_Y = [green if val >= 0 else red for val in Y_f0.real]
+    colors_real_Ypred = [green if val >= 0 else red for val in Y_pred_f0.real]
+    colors_imag_Y = [yellow if val >= 0 else purple for val in Y_f0.imag]
+    colors_imag_Ypred = [yellow if val >= 0 else purple for val in Y_pred_f0.imag]
+
+    # Create a 2x2 subplot: lef column for real parts, right column for imaginary parts.
+    fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+
+    # Plot real parts of Y_f0.
+    axs[0, 0].bar(indices, Y_f0.real, color=colors_real_Y)
+    axs[0, 0].set_title(r"$Y_{f_0}$ Real")
+    axs[0, 0].set_xticks(indices)
+
+    # Plot real parts of Y_pred_f0.
+    axs[1, 0].bar(indices, Y_pred_f0.real, color=colors_real_Ypred)
+    axs[1, 0].set_title(r"$Y^{pred}_{f_0}$ Real")
+    axs[1, 0].set_xticks(indices)
+
+    # Plot imaginary parts of Y_f0.
+    axs[0, 1].bar(indices, Y_f0.imag, color=colors_imag_Y)
+    axs[0, 1].set_title(r"$Y_{f_0}$ Imag")
+    axs[0, 1].set_xticks(indices)
+
+    # Plot imaginary parts of Y_pred_f0.
+    axs[1, 1].bar(indices, Y_pred_f0.imag, color=colors_imag_Ypred)
+    axs[1, 1].set_title(r"$Y^{pred}_{f_0}$ Imag")
+    axs[1, 1].set_xticks(indices)
+
+    # Annotate bars with values (rounded to 2 decimals)
+    for ax in axs.flat:
+        for container in ax.containers:
+            ax.bar_label(container, fmt="%.2f")
+
+    fig.suptitle("Comparison of Fourier Coefficients at f0", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+
+
+def complex_to_rgb(matrix):
+    """
+    Convert a complex matrix to an RGB image using an HSV mapping:
+      - Hue: phase (normalized from -pi to pi → 0 to 1)
+      - Saturation: fixed at 1.
+      - Value: magnitude (normalized to 0-1).
+    """
+    # Ensure matrix is two-dimensional.
+    mat = np.atleast_2d(matrix)
+
+    # Compute phase and magnitude.
+    phase = np.angle(mat)  # Range: [-pi, pi]
+    magnitude = np.abs(mat)
+
+    # Normalize phase to [0,1].
+    norm_phase = (phase + np.pi) / (2 * np.pi)
+    # Normalize magnitude to [0,1] using its maximum.
+    max_mag = magnitude.max() if magnitude.max() != 0 else 1
+    norm_mag = magnitude / max_mag
+
+    # Build an HSV image.
+    hsv = np.zeros(mat.shape + (3,))
+    hsv[..., 0] = norm_phase  # Hue from phase.
+    hsv[..., 1] = 1  # Full saturation.
+    hsv[..., 2] = norm_mag  # Value from normalized magnitude.
+
+    # Convert HSV to RGB.
+    rgb = hsv_to_rgb(hsv)
+    return rgb
+
+
+def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
+    """
+    Plot a complex matrix on the provided Axes object using an HSV mapping.
+
+    The cell color is determined by:
+      - Hue: phase of the complex number.
+      - Value: magnitude.
+
+    Optionally, the numerical complex value is overlaid.
+    """
+    # Convert the complex matrix to an RGB image.
+    rgb = complex_to_rgb(matrix)
+    ax.imshow(rgb, interpolation="none", aspect="auto")
+    ax.set_title(title)
+    ax.axis("off")
+
+    # Expand if single column vector
+    if np.ndim(matrix) < 2:
+        matrix = np.expand_dims(matrix, axis=1)
+
+    if show_values:
+        n, m = matrix.shape
+        for i in range(n):
+            for j in range(m):
+                # Format the complex number with 2 decimal precision.
+                # If the imaginary part is negative, the sign will appear automatically.
+                value_str = f"{matrix[i, j].real:.2f}{matrix[i, j].imag:+.2f}j"
+                ax.text(
+                    j,
+                    i,
+                    value_str,
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=10,
+                )
+
+
+def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    plot_complex_matrix_on_ax(ax, matrix, title=title, show_values=show_values)
+    plt.show()
+
+
+def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
+    """
+    Plot the matrices Y, C, and X side by side as if in the equation:
+         Y = C × X
+
+    Each matrix is plotted using an HSV-based visualization with overlaid values.
+    If Y or X have fewer than 2 dimensions, they are automatically expanded.
+    The equation symbols are positioned using the axes' positions to avoid overlapping.
+    """
+    # Automatically expand dimensions if necessary.
+    # if np.ndim(Y) < 2:
+    #     Y = np.expand_dims(Y, axis=1)
+    # if np.ndim(X) < 2:
+    #     X = np.expand_dims(X, axis=1)
+
+    # Use a gridspec with some horizontal space between axes.
+    fig, axs = plt.subplots(
+        1, 3, figsize=(15, 5), gridspec_kw={"width_ratios": [2, 1, 1], "wspace": 0.5}
+    )
+
+    # Plot each matrix on its own axis.
+    plot_complex_matrix_on_ax(axs[0], Y, title=titles[0], show_values=show_values)
+    plot_complex_matrix_on_ax(axs[1], C, title=titles[1], show_values=show_values)
+    plot_complex_matrix_on_ax(axs[2], X, title=titles[2], show_values=show_values)
+
+    # Get the positions of the axes in figure coordinates.
+    pos0 = axs[0].get_position()  # Position of first subplot
+    pos1 = axs[1].get_position()  # Position of second subplot
+    pos2 = axs[2].get_position()  # Position of third subplot
+
+    # Compute x positions for the symbols:
+    # Place "=" halfway between the right edge of the first and the left edge of the second.
+    eq_x = (pos0.x1 + pos1.x0) / 2.0
+    # Place "×" halfway between the right edge of the second and the left edge of the third.
+    mult_x = (pos1.x1 + pos2.x0) / 2.0
+    # Use the vertical center of the middle axis.
+    eq_y = (pos1.y0 + pos1.y1) / 2.0
+
+    # Add the equation symbols using figure coordinates.
+    fig.text(eq_x, eq_y, "=", fontsize=30, ha="center", va="center")
+    fig.text(mult_x, eq_y, "×", fontsize=30, ha="center", va="center")
+
+    fig.suptitle("Equation: Y = C × X", fontsize=32)
+    plt.tight_layout(rect=[0, 0, 1, 0.90])
     plt.show()
