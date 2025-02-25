@@ -188,7 +188,7 @@ def experiment_3(plot=False, cosine=False):
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
     # Frequency of interest
-    f0 = 100
+    f0 = 1_000 / 4
 
     sources = [
         SoundSource(distance=2.0, angle=np.pi / 4, frequency=f0, amplitude=1.0),
@@ -223,11 +223,14 @@ def experiment_3(plot=False, cosine=False):
             # TODO add attenuation as 1/d_{ij}
 
     # the time signal at the source, before any phaseshifting
-    x = np.array([source.amplitude * np.sin(omega * t) for source in sources])
+    if cosine:
+        x = np.array([source.amplitude * np.cos(omega * t) for source in sources])
+    else:
+        x = np.array([source.amplitude * np.sin(omega * t) for source in sources])
+
     X = fft(x, axis=1)
 
     idx = np.argmin(np.abs(fft_frequencies - f0))
-    print()
 
     Y_f0 = frequency_spectrum[:, idx]
     X_f0 = X[:, idx]
@@ -238,12 +241,16 @@ def experiment_3(plot=False, cosine=False):
     # print(f"{Y_f0=}")
     print(f"{C.shape=}")
 
-    plot_complex_matrix(Y_pred_f0)
-    plot_complex_matrix(Y_f0)
+    plot_complex_matrix(C)
+    # plot_complex_matrix(Y_f0)
     plot_equation(Y_pred_f0, C, X_f0)
 
     # TODO Compressed sensing algoritme
     # TODO invertere
+
+def experiment_4():
+    ...
+
 
 
 if __name__ == "__main__":
@@ -256,4 +263,4 @@ if __name__ == "__main__":
     )
     # plot_complex_matrix_hsv(B, show_values=True)
 
-    experiment_3(cosine=True)
+    experiment_4()

@@ -449,6 +449,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
     ax.axis("off")
 
     # Expand if single column vector
+    # not sure if this causes problems
     if np.ndim(matrix) < 2:
         matrix = np.expand_dims(matrix, axis=1)
 
