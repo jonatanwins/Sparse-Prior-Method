@@ -223,11 +223,8 @@ def experiment_3(plot=False, cosine=False):
             # TODO add attenuation as 1/d_{ij}
 
     # the time signal at the source, before any phaseshifting
-    if cosine:
-        x = np.array([source.amplitude * np.cos(omega * t) for source in sources])
-    else:
-        x = np.array([source.amplitude * np.sin(omega * t) for source in sources])
-
+    f = np.cos if cosine else np.sin
+    x = np.array([source.amplitude * f(omega * t) for source in sources])
     X = fft(x, axis=1)
 
     idx = np.argmin(np.abs(fft_frequencies - f0))
@@ -248,9 +245,8 @@ def experiment_3(plot=False, cosine=False):
     # TODO Compressed sensing algoritme
     # TODO invertere
 
-def experiment_4():
-    ...
 
+def experiment_4(): ...
 
 
 if __name__ == "__main__":

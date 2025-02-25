@@ -451,7 +451,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
     # Expand if single column vector
     # not sure if this causes problems
     if np.ndim(matrix) < 2:
-        matrix = np.expand_dims(matrix, axis=1)
+        matrix = np.expand_dims(matrix, axis=0)
 
     if show_values:
         n, m = matrix.shape
@@ -459,7 +459,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
             for j in range(m):
                 # Format the complex number with 2 decimal precision.
                 # If the imaginary part is negative, the sign will appear automatically.
-                value_str = f"{matrix[i, j].real:.2f}{matrix[i, j].imag:+.2f}j"
+                value_str = f"{matrix[i, j].real:.0f}{matrix[i, j].imag:+.0f}j"
                 ax.text(
                     j,
                     i,
@@ -519,6 +519,6 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
     fig.text(eq_x, eq_y, "=", fontsize=30, ha="center", va="center")
     fig.text(mult_x, eq_y, "×", fontsize=30, ha="center", va="center")
 
-    fig.suptitle("Equation: Y = C × X", fontsize=32)
+    fig.suptitle(f"Equation: {titles[0]} = {titles[1]}{titles[2]}", fontsize=32)
     plt.tight_layout(rect=[0, 0, 1, 0.90])
     plt.show()
