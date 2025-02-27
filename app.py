@@ -7,6 +7,7 @@ from plotting import (
     plot_equation,
 )
 from scipy.fft import fft, ifft, fftfreq, fftshift
+from DFT import DFT
 
 
 # Constants
@@ -14,6 +15,10 @@ speed_of_sound = 343  # m/s
 
 
 def initialize_linear_array(array_size, microphone_spacing):
+    # Edge case
+    if array_size == 1:
+        return np.array([0.0]), np.array([0.0])
+
     x_microphone_positions = (
         np.linspace(-(array_size) / 2, (array_size) / 2, array_size)
         * microphone_spacing
@@ -246,7 +251,27 @@ def experiment_3(plot=False, cosine=False):
     # TODO invertere
 
 
-def experiment_4(): ...
+def experiment_4(plot=False):
+    # really simple dft
+    array_size = 1
+    microphone_spacing = 0.1
+    x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
+
+    # Frequency of interest
+    f0 = 1_000
+
+    sources = [
+        SoundSource(distance=2.0, angle=0, frequency=f0, amplitude=1.0),
+    ]
+
+    t, composite_waveforms, individual_waveforms, delays_dict = (
+        simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
+    )
+
+    if plot:
+        plot_overview(
+            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+        )
 
 
 if __name__ == "__main__":

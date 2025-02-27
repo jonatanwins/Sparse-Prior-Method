@@ -180,7 +180,7 @@ def plot_geometry(ax, x_positions, y_positions, sources):
 
     # Pad by 10% (this is completely hacked atm)
     pad_factor = 0.2
-    half_span = 1.2 * max_span * (1 + pad_factor)
+    half_span = 1.5 * max_span * (1 + pad_factor)
 
     # Final limits
     ax.set_xlim(-half_span, half_span)
@@ -459,7 +459,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
             for j in range(m):
                 # Format the complex number with 2 decimal precision.
                 # If the imaginary part is negative, the sign will appear automatically.
-                value_str = f"{matrix[i, j].real:.0f}{matrix[i, j].imag:+.0f}j"
+                value_str = f"{matrix[i, j].real:.1f}{matrix[i, j].imag:+.1f}j"
                 ax.text(
                     j,
                     i,
@@ -494,7 +494,7 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
 
     # Use a gridspec with some horizontal space between axes.
     fig, axs = plt.subplots(
-        1, 3, figsize=(15, 5), gridspec_kw={"width_ratios": [2, 1, 1], "wspace": 0.5}
+        1, 3, figsize=(15, 5), gridspec_kw={"width_ratios": [1, 1, 1], "wspace": 0.1}
     )
 
     # Plot each matrix on its own axis.
@@ -520,5 +520,5 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
     fig.text(mult_x, eq_y, "×", fontsize=30, ha="center", va="center")
 
     fig.suptitle(f"Equation: {titles[0]} = {titles[1]}{titles[2]}", fontsize=32)
-    plt.tight_layout(rect=[0, 0, 1, 0.90])
+    # plt.tight_layout(rect=[0, 0, 1, 0.90])
     plt.show()
