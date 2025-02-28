@@ -5,9 +5,10 @@ from plotting import (
     plot_Y_comparison,
     plot_complex_matrix,
     plot_equation,
+    plot_time_and_frequency,
 )
 from scipy.fft import fft, ifft, fftfreq, fftshift
-from DFT import DFT
+from DFT import DFT, DFT_matrix
 
 
 # Constants
@@ -258,20 +259,44 @@ def experiment_4(plot=False):
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
     # Frequency of interest
-    f0 = 1_000
+    f0 = 1
+    sampling_rate = 10
 
     sources = [
-        SoundSource(distance=2.0, angle=0, frequency=f0, amplitude=1.0),
+        SoundSource(distance=100.0, angle=0, frequency=f0, amplitude=1.0),
     ]
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
-        simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
+        simulate_waveforms_multiple_sources(
+            x_mics, y_mics, sources, sampling_rate=sampling_rate
+        )
     )
 
+    # Our time signal
+    x = composite_waveforms[0]
+    # There is only one composite waveform and it needs to be unpacked
+    dft_X, dft_freq = DFT(composite_waveforms[0])
+    fft_X, fft_freq = fft(x), fftfreq(len(x))
+
+    F = DFT_matrix(x)
     if plot:
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
+        plot_equation(
+            dft_X, F, x, titles=("X", "F", "x"), show_values=False, ratios=[1, 10, 1]
+        )
+        plot_time_and_frequency(x, dft_X, t, dft_freq)
+        plot_time_and_frequency(x, fft_X, t, fft_freq)
+
+    # TODO finne riktig frekvens å sjekke
+    idx = np.argmin(np.abs(dft_freq - f0))
+
+    print(dft_freq[idx])
+    print(fft_freq[idx])
+
+    # TODO do the fourier mixing model calculataions and visualize,
+    # this should let you compare the direct approach (fft of Y) with the computed approach CX
 
 
 if __name__ == "__main__":
@@ -284,4 +309,4 @@ if __name__ == "__main__":
     )
     # plot_complex_matrix_hsv(B, show_values=True)
 
-    experiment_4()
+    experiment_4(True)

@@ -112,7 +112,7 @@ def plot_delays(x_positions, y_positions, sources, t, composite_waveforms, delay
     plt.show()
 
 
-def plot_geometry(ax, x_positions, y_positions, sources):
+def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     """
     Plot microphones, sources, and origin on the given Axes object.
     """
@@ -138,6 +138,9 @@ def plot_geometry(ax, x_positions, y_positions, sources):
             edgecolor="k",
             label=f"Source {idx+1}",
         )
+    if show_frequency:
+        # Annotate with the frequency attribute, with a slight offset
+        ax.text(sx + 0.05, sy + 0.05, f"{src.frequency} Hz", fontsize=9, color="red")
 
     # Plot origin
     # ax.scatter(
@@ -315,8 +318,11 @@ def plot_overview(
             # label=f"Mic {mic_idx}",
             # consider no label to avoid legend clutter
         )
+
     # First mic in black
     ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 1")
+    # Plot the measurement points
+    ax_composite.scatter(t, composite_waveforms[0], color="gold")
 
     ax_composite.set_title("Composite Waveforms (All Sources Summed)")
     ax_composite.set_xlabel("Time (s)")
@@ -442,16 +448,17 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
 
     Optionally, the numerical complex value is overlaid.
     """
+    # Expand if single column vector
+    # not sure if this causes problems
+    # essential that it is before complex to rgb
+    if np.ndim(matrix) < 2:
+        matrix = np.expand_dims(matrix, axis=1)
+
     # Convert the complex matrix to an RGB image.
     rgb = complex_to_rgb(matrix)
     ax.imshow(rgb, interpolation="none", aspect="auto")
     ax.set_title(title)
     ax.axis("off")
-
-    # Expand if single column vector
-    # not sure if this causes problems
-    if np.ndim(matrix) < 2:
-        matrix = np.expand_dims(matrix, axis=0)
 
     if show_values:
         n, m = matrix.shape
@@ -477,7 +484,7 @@ def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
     plt.show()
 
 
-def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
+def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, ratios=[1, 1, 1]):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
          Y = C × X
@@ -494,7 +501,7 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
 
     # Use a gridspec with some horizontal space between axes.
     fig, axs = plt.subplots(
-        1, 3, figsize=(15, 5), gridspec_kw={"width_ratios": [1, 1, 1], "wspace": 0.1}
+        1, 3, figsize=(15, 5), gridspec_kw={"width_ratios": ratios, "wspace": 0.1}
     )
 
     # Plot each matrix on its own axis.
@@ -521,4 +528,45 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True):
 
     fig.suptitle(f"Equation: {titles[0]} = {titles[1]}{titles[2]}", fontsize=32)
     # plt.tight_layout(rect=[0, 0, 1, 0.90])
+    plt.show()
+
+
+def plot_time_and_frequency(
+    function_values, fourier_values, time_axis=None, frequency_axis=None
+):
+    """
+    Plots a time-domain function and its Fourier transform in a two-panel figure.
+
+    Parameters:
+        function_values (array-like): Array of values representing the function in the time domain.
+        fourier_values (array-like): Array representing the Fourier transform of the function.
+        time_axis (array-like, optional): Array of time points corresponding to function_values.
+            Defaults to np.arange(len(function_values)) if None.
+        frequency_axis (array-like, optional): Array of frequency points corresponding to fourier_values.
+            Defaults to np.arange(len(fourier_values)) if None.
+    """
+    # Set default axes if not provided
+    if time_axis is None:
+        time_axis = np.arange(len(function_values))
+    if frequency_axis is None:
+        frequency_axis = np.arange(len(fourier_values))
+
+    # Create a figure with two subplots: time domain on top, frequency domain below
+    fig, (ax_time, ax_freq) = plt.subplots(2, 1, figsize=(10, 8))
+
+    # Plot the time-domain function
+    ax_time.plot(time_axis, function_values, color="orange", lw=2)
+    ax_time.set_title("Function Graph (Time Domain)")
+    ax_time.set_xlabel("Time")
+    ax_time.set_ylabel("Amplitude")
+    ax_time.grid(True)
+
+    # Plot the magnitude of the Fourier transform
+    ax_freq.plot(frequency_axis, fourier_values, color="red", lw=2)
+    ax_freq.set_title("Fourier Transform (Frequency Domain)")
+    ax_freq.set_xlabel("Frequency")
+    ax_freq.set_ylabel("Magnitude")
+    ax_freq.grid(True)
+
+    plt.tight_layout()
     plt.show()

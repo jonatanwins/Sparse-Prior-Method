@@ -17,16 +17,13 @@ def DFT(x):
             F[i, j] = omega ** (i * j)
 
     X = F @ x
-    F_flex = big_flex_DFT(x)
-    plot_equation(F, F_flex, x, show_values=False)
-    # plot_equation(X, F, x, titles=("X", "F", "x"), show_values=False)
 
     frequencies = np.array([k / N for k in range(N)])
 
     return X, frequencies
 
 
-def big_flex_DFT(x):
+def DFT_matrix(x):
     N = len(x)
     k = np.arange(N)
     F = np.exp(-2j * np.pi * np.outer(k, k) / N)
