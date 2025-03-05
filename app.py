@@ -303,9 +303,9 @@ def experiment_4(plot=False):
     C = np.exp(-2j * np.pi * tau)
     x = np.sin(2 * np.pi * t)
     X = fft(x)
-    plot_equation(X, DFT_matrix(x), x, titles=["X", "F", "x"], ratios=[1, 10, 1])
-    plot_equation(fft_Y, C, X)
-    plot_equation(C * X, dft_Y, fft_Y, titles=["CX", " DFT_Y ", " FFT_Y "])
+    plot_equation(X, DFT_matrix(x), x, titles=["X", "F", "x"], ratios=[1, 10, 1], polar=True)
+    plot_equation(fft_Y, C, X, polar=True)
+    plot_equation(C * X, dft_Y, fft_Y, titles=["CX", " DFT_Y ", " FFT_Y "], polar=True)
 
 
 if __name__ == "__main__":

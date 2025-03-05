@@ -438,7 +438,7 @@ def complex_to_rgb(matrix):
     return rgb
 
 
-def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
+def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=False):
     """
     Plot a complex matrix on the provided Axes object using an HSV mapping.
 
@@ -464,9 +464,13 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True):
         n, m = matrix.shape
         for i in range(n):
             for j in range(m):
-                # Format the complex number with 2 decimal precision.
-                # If the imaginary part is negative, the sign will appear automatically.
-                value_str = f"{matrix[i, j].real:.1f}{matrix[i, j].imag:+.1f}j"
+                if polar:
+                    # Compute magnitude and phase (in degrees)
+                    r = np.abs(matrix[i, j])
+                    theta = np.angle(matrix[i, j], deg=True)
+                    value_str = f"{r:.1f}∠{theta:.0f}°"
+                else:
+                    value_str = f"{matrix[i, j].real:.1f}{matrix[i, j].imag:+.1f}j"
                 ax.text(
                     j,
                     i,
@@ -484,7 +488,7 @@ def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
     plt.show()
 
 
-def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, ratios=[1, 1, 1]):
+def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=False, ratios=[1, 1, 1]):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
          Y = C × X
@@ -505,9 +509,9 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, ratios=[1, 
     )
 
     # Plot each matrix on its own axis.
-    plot_complex_matrix_on_ax(axs[0], Y, title=titles[0], show_values=show_values)
-    plot_complex_matrix_on_ax(axs[1], C, title=titles[1], show_values=show_values)
-    plot_complex_matrix_on_ax(axs[2], X, title=titles[2], show_values=show_values)
+    plot_complex_matrix_on_ax(axs[0], Y, title=titles[0], show_values=show_values, polar=polar)
+    plot_complex_matrix_on_ax(axs[1], C, title=titles[1], show_values=show_values, polar=polar)
+    plot_complex_matrix_on_ax(axs[2], X, title=titles[2], show_values=show_values, polar=polar)
 
     # Get the positions of the axes in figure coordinates.
     pos0 = axs[0].get_position()  # Position of first subplot
