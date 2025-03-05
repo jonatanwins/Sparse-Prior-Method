@@ -273,30 +273,39 @@ def experiment_4(plot=False):
     )
 
     # Our time signal
-    x = composite_waveforms[0]
+    y = composite_waveforms[0]
     # There is only one composite waveform and it needs to be unpacked
-    dft_X, dft_freq = DFT(composite_waveforms[0])
-    fft_X, fft_freq = fft(x), fftfreq(len(x))
+    dft_Y, dft_freq = DFT(composite_waveforms[0])
+    # It is crucial that you retrieve the fftfreqs with 1/sampling_rate, otherwise 1hz is assumed
+    fft_Y, fft_freq = fft(y), fftfreq(len(y), d=1 / sampling_rate)
 
-    F = DFT_matrix(x)
+    F = DFT_matrix(y)
     if plot:
-        plot_overview(
-            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
-        )
+        # plot_overview(
+        #     x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+        # )
         plot_equation(
-            dft_X, F, x, titles=("X", "F", "x"), show_values=False, ratios=[1, 10, 1]
+            dft_Y, F, y, titles=("Y", "F", "y"), show_values=True, ratios=[1, 10, 1]
         )
-        plot_time_and_frequency(x, dft_X, t, dft_freq)
-        plot_time_and_frequency(x, fft_X, t, fft_freq)
+        plot_time_and_frequency(y, dft_Y, t, dft_freq)
+        plot_time_and_frequency(y, fft_Y, t, fft_freq)
 
-    # TODO finne riktig frekvens å sjekke
     idx = np.argmin(np.abs(dft_freq - f0))
 
-    print(dft_freq[idx])
-    print(fft_freq[idx])
+    print(dft_Y[idx])
+    print(fft_Y[idx])
 
-    # TODO do the fourier mixing model calculataions and visualize,
+    # TODO do the fourier mixing model calculations and visualize,
     # this should let you compare the direct approach (fft of Y) with the computed approach CX
+    # Step 1: y -> Y and x -> CX
+    # Constructing C_omega_0 for the time delay
+    tau = delays_dict[1]
+    C = np.exp(-2j * np.pi * tau)
+    x = np.sin(2 * np.pi * t)
+    X = fft(x)
+    plot_equation(X, DFT_matrix(x), x, titles=["X", "F", "x"], ratios=[1, 10, 1])
+    plot_equation(fft_Y, C, X)
+    plot_equation(C * X, dft_Y, fft_Y, titles=["CX", " DFT_Y ", " FFT_Y "])
 
 
 if __name__ == "__main__":
@@ -309,4 +318,4 @@ if __name__ == "__main__":
     )
     # plot_complex_matrix_hsv(B, show_values=True)
 
-    experiment_4(True)
+    experiment_4(plot=False)

@@ -18,7 +18,8 @@ def DFT(x):
 
     X = F @ x
 
-    frequencies = np.array([k / N for k in range(N)])
+    # This depends on the spacing which is 1/sampling_rate
+    frequencies = np.array([k for k in range(N)])
 
     return X, frequencies
 
