@@ -488,7 +488,9 @@ def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
     plt.show()
 
 
-def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=False, ratios=[1, 1, 1]):
+def plot_equation(
+    Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=False, ratios=[1, 1, 1]
+):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
          Y = C × X
@@ -509,9 +511,15 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=False
     )
 
     # Plot each matrix on its own axis.
-    plot_complex_matrix_on_ax(axs[0], Y, title=titles[0], show_values=show_values, polar=polar)
-    plot_complex_matrix_on_ax(axs[1], C, title=titles[1], show_values=show_values, polar=polar)
-    plot_complex_matrix_on_ax(axs[2], X, title=titles[2], show_values=show_values, polar=polar)
+    plot_complex_matrix_on_ax(
+        axs[0], Y, title=titles[0], show_values=show_values, polar=polar
+    )
+    plot_complex_matrix_on_ax(
+        axs[1], C, title=titles[1], show_values=show_values, polar=polar
+    )
+    plot_complex_matrix_on_ax(
+        axs[2], X, title=titles[2], show_values=show_values, polar=polar
+    )
 
     # Get the positions of the axes in figure coordinates.
     pos0 = axs[0].get_position()  # Position of first subplot
@@ -536,7 +544,12 @@ def plot_equation(Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=False
 
 
 def plot_time_and_frequency(
-    function_values, fourier_values, time_axis=None, frequency_axis=None
+    function_values,
+    fourier_values,
+    time_axis=None,
+    frequency_axis=None,
+    title=None,
+    absolute=True,
 ):
     """
     Plots a time-domain function and its Fourier transform in a two-panel figure.
@@ -558,6 +571,9 @@ def plot_time_and_frequency(
     # Create a figure with two subplots: time domain on top, frequency domain below
     fig, (ax_time, ax_freq) = plt.subplots(2, 1, figsize=(10, 8))
 
+    if title is not None:
+        fig.suptitle(title, fontsize=16)
+
     # Plot the time-domain function
     ax_time.plot(time_axis, function_values, color="orange", lw=2)
     ax_time.set_title("Function Graph (Time Domain)")
@@ -566,6 +582,8 @@ def plot_time_and_frequency(
     ax_time.grid(True)
 
     # Plot the magnitude of the Fourier transform
+    if absolute:
+        fourier_values = abs(fourier_values)
     ax_freq.plot(frequency_axis, fourier_values, color="red", lw=2)
     ax_freq.set_title("Fourier Transform (Frequency Domain)")
     ax_freq.set_xlabel("Frequency")

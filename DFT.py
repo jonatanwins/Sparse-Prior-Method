@@ -8,8 +8,11 @@ from scipy.fft import fft, fftfreq
 # ------------------------
 
 
-def DFT(x):
+def DFT(x, sampling_rate=False):
     N = len(x)
+    if not sampling_rate:
+        sampling_rate = N
+
     omega = np.exp(-1j * 2 * np.pi / N)
     F = np.zeros((N, N), dtype=complex)
     for i in range(N):
@@ -19,7 +22,7 @@ def DFT(x):
     X = F @ x
 
     # This depends on the spacing which is 1/sampling_rate
-    frequencies = np.array([k for k in range(N)])
+    frequencies = np.array([k for k in range(N)]) * sampling_rate / N
 
     return X, frequencies
 

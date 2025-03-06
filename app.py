@@ -7,7 +7,7 @@ from plotting import (
     plot_equation,
     plot_time_and_frequency,
 )
-from scipy.fft import fft, ifft, fftfreq, fftshift
+from scipy.fft import fft, ifft, fftfreq, fftshift, rfftfreq
 from DFT import DFT, DFT_matrix
 
 
@@ -79,17 +79,16 @@ def simulate_waveform_for_source(x_positions, y_positions, source, t, cosine=Fal
     """
 
     delays = calculate_delays(x_positions, y_positions, source)
-    phase_shifts = (
-        2 * np.pi * source.frequency * delays
-    )  # angle frequency times respective delay
+    # BUG
 
     f = np.cos if cosine else np.sin
 
     # at the microphone, hence the shift
+    # BUG SQUASH: the shift is negative as we are at an earlier stage of the signal
     waveforms = np.array(
         [
-            source.amplitude * f(2 * np.pi * source.frequency * t + shift)
-            for shift in phase_shifts
+            source.amplitude * f(2 * np.pi * source.frequency * (t - delay))
+            for delay in delays
         ]
     )
 
@@ -263,7 +262,7 @@ def experiment_4(plot=False):
     sampling_rate = 10
 
     sources = [
-        SoundSource(distance=100.0, angle=0, frequency=f0, amplitude=1.0),
+        SoundSource(distance=speed_of_sound / 5, angle=0, frequency=f0, amplitude=1.0),
     ]
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
@@ -281,9 +280,9 @@ def experiment_4(plot=False):
 
     F = DFT_matrix(y)
     if plot:
-        # plot_overview(
-        #     x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
-        # )
+        plot_overview(
+            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+        )
         plot_equation(
             dft_Y, F, y, titles=("Y", "F", "y"), show_values=True, ratios=[1, 10, 1]
         )
@@ -292,9 +291,6 @@ def experiment_4(plot=False):
 
     idx = np.argmin(np.abs(dft_freq - f0))
 
-    print(dft_Y[idx])
-    print(fft_Y[idx])
-
     # TODO do the fourier mixing model calculations and visualize,
     # this should let you compare the direct approach (fft of Y) with the computed approach CX
     # Step 1: y -> Y and x -> CX
@@ -302,10 +298,35 @@ def experiment_4(plot=False):
     tau = delays_dict[1]
     C = np.exp(-2j * np.pi * tau)
     x = np.sin(2 * np.pi * t)
-    X = fft(x)
-    plot_equation(X, DFT_matrix(x), x, titles=["X", "F", "x"], ratios=[1, 10, 1], polar=True)
-    plot_equation(fft_Y, C, X, polar=True)
-    plot_equation(C * X, dft_Y, fft_Y, titles=["CX", " DFT_Y ", " FFT_Y "], polar=True)
+    X, spectrum_x = DFT(x, sampling_rate=sampling_rate)
+
+    Y_pred = C * X
+    # BUG y_pred is complex
+    y_pred = ifft(Y_pred)
+
+    print(f"{abs(y_pred[0])=}")
+    print(f"{y[0]=}")
+    # plot_time_and_frequency(
+    #     y,
+    #     y_pred,
+    #     time_axis=t,
+    #     frequency_axis=t,
+    #     title="y top and y ifft from CX bottom",
+    #     absolute=False,
+    # )
+
+    # plot_time_and_frequency(
+    #     y_pred, Y_pred, t, spectrum_x, title="Inverse fourier Y from CX"
+    # )
+
+    # plot_time_and_frequency(x, abs(X), time_axis=t, frequency_axis=spectrum_x)
+
+    # plot_equation(
+    #     X, DFT_matrix(x), x, titles=["X", "F", "x"], ratios=[1, 10, 1], polar=True
+    # )
+    # plot_equation(fft_Y, C, X, polar=True)
+    # plot_equation(C * X, dft_Y, fft_Y, titles=["CX", " DFT_Y ", " FFT_Y "], polar=True)
+    # plot_equation(C * X, C, X, titles=["C*X", "C", "X"], polar=True)
 
 
 if __name__ == "__main__":
