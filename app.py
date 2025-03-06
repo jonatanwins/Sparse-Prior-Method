@@ -1,5 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
+if sys.platform == "darwin":
+    import addcopyfighandler
+
 from plotting import (
     plot_overview,
     plot_Y_comparison,
@@ -278,8 +282,8 @@ def experiment_4(plot=False):
     # It is crucial that you retrieve the fftfreqs with 1/sampling_rate, otherwise 1hz is assumed
     fft_Y, fft_freq = fft(y), fftfreq(len(y), d=1 / sampling_rate)
 
-    F = DFT_matrix(y)
     if plot:
+        F = DFT_matrix(y)
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
@@ -304,8 +308,8 @@ def experiment_4(plot=False):
     # BUG y_pred is complex
     y_pred = ifft(Y_pred)
 
-    print(f"{abs(y_pred[0])=}")
-    print(f"{y[0]=}")
+    print(f"{abs(Y_pred[idx])=}")
+    print(f"{fft_Y[idx]=}")
     # plot_time_and_frequency(
     #     y,
     #     y_pred,
