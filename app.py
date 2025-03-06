@@ -1,8 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
-if sys.platform == "darwin":
-    import addcopyfighandler
+
+# if sys.platform == "darwin":
+#     import addcopyfighandler
 
 from plotting import (
     plot_overview,
@@ -262,6 +263,7 @@ def experiment_4(plot=False):
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
     # Frequency of interest
+    # BUG does not work for f0 10 and sampling_rate 100
     f0 = 1
     sampling_rate = 10
 
@@ -282,8 +284,8 @@ def experiment_4(plot=False):
     # It is crucial that you retrieve the fftfreqs with 1/sampling_rate, otherwise 1hz is assumed
     fft_Y, fft_freq = fft(y), fftfreq(len(y), d=1 / sampling_rate)
 
+    F = DFT_matrix(y)
     if plot:
-        F = DFT_matrix(y)
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
@@ -300,13 +302,23 @@ def experiment_4(plot=False):
     # Step 1: y -> Y and x -> CX
     # Constructing C_omega_0 for the time delay
     tau = delays_dict[1]
-    C = np.exp(-2j * np.pi * tau)
+    C = np.exp(-1j * 2 * np.pi * fft_freq * tau)
     x = np.sin(2 * np.pi * t)
     X, spectrum_x = DFT(x, sampling_rate=sampling_rate)
 
+    X_fft = fft(x)
+
+    # plot_time_and_frequency(ifft(fft(x)), fft(x), t, dft_freq, absolute=False)
+    # plot_equation(X_fft, X, x, titles=("X_fft", "X_dft, ", "x"), polar=True)
+
     Y_pred = C * X
     # BUG y_pred is complex
+    plot_equation(Y_pred, C, X, titles=("C*X", "C", "X"))
+    plot_equation(Y_pred, C, X, titles=("fft_Y from y", "C", "X"))
+    plot_equation(fft_Y, Y_pred, C, ["y_pred", "Y_pred", "C"])
     y_pred = ifft(Y_pred)
+    plot_time_and_frequency(y_pred, Y_pred, t, fft_freq, "Y_pred")
+    plot_time_and_frequency(y, fft_Y, t, fft_freq, "Y from tau")
 
     print(f"{abs(Y_pred[idx])=}")
     print(f"{fft_Y[idx]=}")
@@ -333,6 +345,67 @@ def experiment_4(plot=False):
     # plot_equation(C * X, C, X, titles=["C*X", "C", "X"], polar=True)
 
 
+def experiment_5():
+    # Parameters
+    fs = 10  # Sampling frequency in Hz
+    duration = 1.0  # Duration in seconds
+    N = int(fs * duration)
+    t = np.linspace(0, duration, N, endpoint=False)
+    f0 = 1  # 0  # hz
+
+    tau = 0.05  # time delay in seconds (e.g., 50 ms)
+
+    # 1. Time-domain delay:
+    # Original signal x(t) = sin(2πt)
+    x = np.sin(2 * np.pi * f0 * t)
+    # y(t) = sin(2π(t - tau))
+    y = np.sin(2 * np.pi * f0 * (t - tau))
+
+    # 2. Frequency domain approach:
+    # Compute Fourier transform of x
+    X = fft(x)
+    # Frequency axis (Hz)
+    freqs = fftfreq(N, d=1 / fs)
+    # Compute the phase shift for each frequency: C(f) = exp(-2πi * f * tau)
+    C = np.exp(-2j * np.pi * freqs * tau)
+    # Apply the delay in the frequency domain: Y_pred = C * X
+    Y_pred = C * X
+    # Inverse FFT to recover the time-domain signal from Y_pred
+    y_pred = ifft(Y_pred)
+
+    # Also compute Y from the time-delayed y for comparison
+    Y = fft(y)
+
+    # Plot time domain comparison
+    plt.figure(figsize=(12, 8))
+
+    plt.subplot(2, 1, 1)
+    plt.plot(t, y, label="y (time delay)", linewidth=2)
+    plt.plot(t, y_pred.real, "--", label="y_pred (ifft(C * X))", linewidth=2)
+    plt.xlabel("Time [s]")
+    plt.ylabel("Amplitude")
+    plt.title("Time Domain Comparison")
+    plt.legend()
+
+    # Plot frequency domain comparison (magnitude spectra)
+    plt.subplot(2, 1, 2)
+    plt.plot(freqs, np.abs(Y), label="|Y| (fft of y)", linewidth=2)
+    plt.plot(freqs, np.abs(Y_pred), "--", label="|Y_pred| (C * X)", linewidth=2)
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel("Magnitude")
+    plt.title("Frequency Domain Comparison")
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+    # Report maximum absolute errors between the two methods
+    time_error = np.max(np.abs(y - y_pred.real))
+    freq_error = np.max(np.abs(Y - Y_pred))
+    print("Max absolute error in time domain:", time_error)
+    print("Max absolute error in frequency domain:", freq_error)
+
+
 if __name__ == "__main__":
     B = np.array(
         [
@@ -343,4 +416,4 @@ if __name__ == "__main__":
     )
     # plot_complex_matrix_hsv(B, show_values=True)
 
-    experiment_4(plot=False)
+    experiment_4()

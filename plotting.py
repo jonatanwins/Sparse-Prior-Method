@@ -583,8 +583,21 @@ def plot_time_and_frequency(
 
     # Plot the magnitude of the Fourier transform
     if absolute:
-        fourier_values = abs(fourier_values)
-    ax_freq.plot(frequency_axis, fourier_values, color="red", lw=2)
+        ax_freq.plot(
+            frequency_axis,
+            abs(fourier_values),
+            color="orange",
+            lw=2,
+            label="absolute value",
+        )
+    else:
+        ax_freq.plot(
+            frequency_axis, fourier_values.real, color="gold", lw=2, label="real"
+        )
+        ax_freq.plot(
+            frequency_axis, fourier_values.imag, color="red", lw=2, label="imag"
+        )
+    ax_freq.legend(loc="upper left")
     ax_freq.set_title("Fourier Transform (Frequency Domain)")
     ax_freq.set_xlabel("Frequency")
     ax_freq.set_ylabel("Magnitude")
