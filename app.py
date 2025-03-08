@@ -258,102 +258,82 @@ def experiment_3(plot=False, cosine=False):
 
 def experiment_4(plot=False):
     # really simple dft
+
     array_size = 1
     microphone_spacing = 0.1
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
     # Frequency of interest
-    # BUG does not work for f0 10 and sampling_rate 100
-    f0 = 1
-    sampling_rate = 10
+    f0 = 100
+    sampling_rate = 10 * f0
+    duration = 2 / f0
+    N = int(sampling_rate * duration)
 
     sources = [
-        SoundSource(distance=speed_of_sound / 5, angle=0, frequency=f0, amplitude=1.0),
+        SoundSource(distance=20, angle=0, frequency=f0, amplitude=1.0),
     ]
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
         simulate_waveforms_multiple_sources(
-            x_mics, y_mics, sources, sampling_rate=sampling_rate
+            x_mics, y_mics, sources, sampling_rate=sampling_rate, duration=duration
         )
     )
+    tau = delays_dict[1][0]
 
-    # Our time signal
+    # 1. Time-domain delay
+    x = np.sin(2 * np.pi * f0 * t)
     y = composite_waveforms[0]
-    # There is only one composite waveform and it needs to be unpacked
-    dft_Y, dft_freq = DFT(composite_waveforms[0])
-    # It is crucial that you retrieve the fftfreqs with 1/sampling_rate, otherwise 1hz is assumed
-    fft_Y, fft_freq = fft(y), fftfreq(len(y), d=1 / sampling_rate)
 
-    F = DFT_matrix(y)
+    # 2. frequency domain approach
+    X = fft(x)
+    freqs = fftfreq(N, d=1 / sampling_rate)
+    C = np.exp(-2j * np.pi * freqs * tau)
+    Y_pred = C * X
+    y_pred = ifft(Y_pred)
+
+    # 3. Time-delay approach
+    Y_fft = fft(y)
+    freq_fft = fftfreq(len(y), d=1 / sampling_rate)
+
     if plot:
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
-        plot_equation(
-            dft_Y, F, y, titles=("Y", "F", "y"), show_values=True, ratios=[1, 10, 1]
-        )
-        plot_time_and_frequency(y, dft_Y, t, dft_freq)
-        plot_time_and_frequency(y, fft_Y, t, fft_freq)
+        # plot_equation(
+        #     Y_dft,
+        #     F,
+        #     y,
+        #     titles=("Y", "F", "y"),
+        #     polar=True,
+        #     ratios=[1, 10, 1],
+        # )
 
-    idx = np.argmin(np.abs(dft_freq - f0))
+        plot_equation(Y_fft, Y_pred, X, ["Y_fft", "Y_pred ", "X"], polar=True)
+        y_pred = ifft(Y_pred)
+        plot_time_and_frequency(y_pred, Y_pred, t, freq_fft, "Y_pred")
+        plot_time_and_frequency(y, Y_fft, t, freq_fft, "Y from tau")
 
-    # TODO do the fourier mixing model calculations and visualize,
-    # this should let you compare the direct approach (fft of Y) with the computed approach CX
-    # Step 1: y -> Y and x -> CX
-    # Constructing C_omega_0 for the time delay
-    tau = delays_dict[1]
-    C = np.exp(-1j * 2 * np.pi * fft_freq * tau)
-    x = np.sin(2 * np.pi * t)
-    X, spectrum_x = DFT(x, sampling_rate=sampling_rate)
+        # Plot time domain comparison
+        plt.figure(figsize=(12, 8))
 
-    X_fft = fft(x)
-
-    # plot_time_and_frequency(ifft(fft(x)), fft(x), t, dft_freq, absolute=False)
-    # plot_equation(X_fft, X, x, titles=("X_fft", "X_dft, ", "x"), polar=True)
-
-    Y_pred = C * X
-    # BUG y_pred is complex
-    plot_equation(Y_pred, C, X, titles=("C*X", "C", "X"))
-    plot_equation(Y_pred, C, X, titles=("fft_Y from y", "C", "X"))
-    plot_equation(fft_Y, Y_pred, C, ["y_pred", "Y_pred", "C"])
-    y_pred = ifft(Y_pred)
-    plot_time_and_frequency(y_pred, Y_pred, t, fft_freq, "Y_pred")
-    plot_time_and_frequency(y, fft_Y, t, fft_freq, "Y from tau")
-
-    print(f"{abs(Y_pred[idx])=}")
-    print(f"{fft_Y[idx]=}")
-    # plot_time_and_frequency(
-    #     y,
-    #     y_pred,
-    #     time_axis=t,
-    #     frequency_axis=t,
-    #     title="y top and y ifft from CX bottom",
-    #     absolute=False,
-    # )
-
-    # plot_time_and_frequency(
-    #     y_pred, Y_pred, t, spectrum_x, title="Inverse fourier Y from CX"
-    # )
-
-    # plot_time_and_frequency(x, abs(X), time_axis=t, frequency_axis=spectrum_x)
-
-    # plot_equation(
-    #     X, DFT_matrix(x), x, titles=["X", "F", "x"], ratios=[1, 10, 1], polar=True
-    # )
-    # plot_equation(fft_Y, C, X, polar=True)
-    # plot_equation(C * X, dft_Y, fft_Y, titles=["CX", " DFT_Y ", " FFT_Y "], polar=True)
-    # plot_equation(C * X, C, X, titles=["C*X", "C", "X"], polar=True)
+        plt.subplot(2, 1, 1)
+        plt.plot(t, y, label="y (time delay)", linewidth=2)
+        plt.plot(t, y_pred.real, "--", label="y_pred (ifft(C * X))", linewidth=2)
+        plt.xlabel("Time [s]")
+        plt.ylabel("Amplitude")
+        plt.title("Time Domain Comparison")
+        plt.legend()
 
 
 def experiment_5():
     # Parameters
-    fs = 10  # Sampling frequency in Hz
+    sampling_rate = 100  # Sampling frequency in Hz
     duration = 1.0  # Duration in seconds
-    N = int(fs * duration)
+    N = int(sampling_rate * duration)
     t = np.linspace(0, duration, N, endpoint=False)
-    f0 = 1  # 0  # hz
+    f0 = 10  # 0  # hz
 
-    tau = 0.05  # time delay in seconds (e.g., 50 ms)
+    tau = np.float64(0.05830903790087463)  # time delay in seconds (e.g., 50 ms)
 
     # 1. Time-domain delay:
     # Original signal x(t) = sin(2πt)
@@ -365,7 +345,7 @@ def experiment_5():
     # Compute Fourier transform of x
     X = fft(x)
     # Frequency axis (Hz)
-    freqs = fftfreq(N, d=1 / fs)
+    freqs = fftfreq(N, d=1 / sampling_rate)
     # Compute the phase shift for each frequency: C(f) = exp(-2πi * f * tau)
     C = np.exp(-2j * np.pi * freqs * tau)
     # Apply the delay in the frequency domain: Y_pred = C * X
@@ -406,14 +386,11 @@ def experiment_5():
     print("Max absolute error in frequency domain:", freq_error)
 
 
-if __name__ == "__main__":
-    B = np.array(
-        [
-            [-10, 3 + 3j, 10],
-            [1j, 1 - 1j, 5 + 5j],
-            [2j + 8, 8j - 2, 6 + 4j],
-        ]
-    )
-    # plot_complex_matrix_hsv(B, show_values=True)
+def experiment_6():
+    # TODO multiple sources and add noise
+    ...
 
-    experiment_4()
+
+if __name__ == "__main__":
+    experiment_4(True)
+    # experiment_5()
