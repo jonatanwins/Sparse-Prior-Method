@@ -8,6 +8,7 @@ from plotting import (
     plot_complex_matrix,
     plot_equation,
     plot_time_and_frequency,
+    plot_matrix_3D,
 )
 from scipy.fft import fft, ifft, fftfreq, fftshift, rfftfreq
 from DFT import DFT, DFT_matrix
@@ -118,8 +119,8 @@ def simulate_waveforms_multiple_sources(
             x_positions, y_positions, source, t, cosine=cosine
         )  # same t
         composite_waveforms += waveform
-        individual_waveforms[idx + 1] = waveform
-        delays_dict[idx + 1] = delays
+        individual_waveforms[idx] = waveform
+        delays_dict[idx] = delays
 
     return t, composite_waveforms, individual_waveforms, delays_dict
 
@@ -277,7 +278,7 @@ def experiment_4(plot=False):
     )
 
     # MODIFY from here on for 6
-    tau = delays_dict[1][0]
+    tau = delays_dict[0][0]
 
     # 1. Time-domain delay
     x = np.sin(2 * np.pi * f0 * t)
@@ -388,21 +389,21 @@ def experiment_5():
 def experiment_6(plot=False):
     # TODO multiple sources and add noise
 
-    num_mics = 8
-    microphone_spacing = 1
-    x_mics, y_mics = initialize_linear_array(num_mics, microphone_spacing)
+    num_mics = 10
+    radius = 1
+    x_mics, y_mics = initialize_circular_array(num_mics, radius)
 
     # Frequency of interest
     f0 = 100
 
+    sources = [
+        SoundSource(distance=10, angle=a, frequency=f0, amplitude=1.0)
+        for a in [i * 0.2 for i in range(10)]
+    ]
     sampling_rate = 10 * f0
-    duration = 1 / f0  # max(1 / f0, 1 / f1)
+    duration = max(1 / source.frequency for source in sources)
     N = int(sampling_rate * duration)
 
-    sources = [
-        SoundSource(distance=20, angle=a, frequency=f0, amplitude=1.0)
-        for a in [i * 0.2 for i in range(4)]
-    ]
     num_sources = len(sources)
 
     t, composite_waveforms, individual_waveforms, delays_dict = (
@@ -411,24 +412,37 @@ def experiment_6(plot=False):
         )
     )
 
-    if plot:
-        plot_overview(
-            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
-        )
     # 1. TIME DOMAIN
-    x = np.array([np.sin(2 * np.pi * f0 * t) for i in range(num_sources)])
+    x = np.array([np.sin(2 * np.pi * source.frequency * t) for source in sources])
     y = composite_waveforms
 
     # 2. FREQUENCY DOMAIN
     X = fft(x, axis=1)
     freqs = fftfreq(N, d=1 / sampling_rate)
     # f0 is constant
-    C = np.zeros((num_mics, num_sources), dtype=complex)
+    C = np.zeros((num_mics, num_sources, N), dtype=complex)
 
-    # Still just for one frequency
+    # C for every frequency
     for i in range(num_mics):
         for j, source in enumerate(sources):
-            C[i, j] = np.exp(-1j * omega * delays_dict[j + 1][i])
+            C[i, j] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
+
+    Y_pred = np.zeros((num_mics,N), dtype=complex)
+    for idf in range(N):
+        Y_pred[:,idf] = C[:,:,idf] @ X[:,idf]
+
+    Y = fft(y)
+
+    
+    if plot:
+        plot_overview(
+            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+        )
+        plot_matrix_3D(C)
+        plot_equation(Y_pred[:,1], C[:,:,1], X[:,1], titles=["Y_pred_f0 ", "C_f0", "X_f0"], polar=True, show_values=True)
+        plot_equation(Y, Y_pred, np.array([[1]]), titles=["Y_fft", "Y_pred=C*X", ""],ratios=[1,1,0])
+        plot_time_and_frequency(ifft(Y_pred),Y_pred,t,freqs, title="ifft of Y_pred from CX")
+        plot_time_and_frequency(y,Y,t,freqs, title="y, and Y from fft")
 
 
 if __name__ == "__main__":

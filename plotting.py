@@ -23,7 +23,7 @@ def plot_array_and_sources(x_positions, y_positions, sources):
     plt.scatter(x_positions, y_positions, label="Microphones", color=next(colors))
     for idx, source in enumerate(sources):
         source_x, source_y = source.get_position()
-        plt.scatter(source_x, source_y, label=f"Source {idx+1}", color=next(colors))
+        plt.scatter(source_x, source_y, label=f"Source {idx}", color=next(colors))
     plt.scatter(0, 0, label="Origin", color=next(colors))
     plt.xlabel("X Position (m)")
     plt.ylabel("Y Position (m)")
@@ -41,8 +41,8 @@ def plot_waveforms(t, composite_waveforms, delays_dict):
     # Plot composite waveforms
     plt.figure(figsize=(10, 6))
     for mic in range(num_mics):
-        plt.plot(t, composite_waveforms[mic], label=f"Mic {mic+1}")
-    plt.title("Composite Waveformds at Microphones")
+        plt.plot(t, composite_waveforms[mic], label=f"Mic {mic}")
+    plt.title("Composite Waveforms at Microphones")
     plt.xlabel("Time (s)")
     plt.ylabel("Amplitude")
     plt.legend()
@@ -79,7 +79,7 @@ def plot_delays(x_positions, y_positions, sources, t, composite_waveforms, delay
     ax.scatter(x_positions, y_positions, label="Microphones", color=next(colors))
     for idx, source in enumerate(sources):
         source_x, source_y = source.get_position()
-        ax.scatter(source_x, source_y, label=f"Source {idx+1}", color=next(colors))
+        ax.scatter(source_x, source_y, label=f"Source {idx}", color=next(colors))
     ax.scatter(0, 0, label="Origin", color=next(colors))
     ax.set_xlabel("X Position (m)")
     ax.set_ylabel("Y Position (m)")
@@ -92,7 +92,7 @@ def plot_delays(x_positions, y_positions, sources, t, composite_waveforms, delay
     ax = axes[1]
     num_mics = composite_waveforms.shape[0]
     for mic in range(num_mics):
-        ax.plot(t, composite_waveforms[mic], label=f"Mic {mic+1}")
+        ax.plot(t, composite_waveforms[mic], label=f"Mic {mic}")
     ax.set_title("Composite Waveforms at Microphones")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Amplitude")
@@ -136,7 +136,7 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
             s=80,
             marker="^",
             edgecolor="k",
-            label=f"Source {idx+1}",
+            label=f"Source {idx}",
         )
         if show_frequency:
             # Annotate with the frequency attribute, with a slight offset
@@ -184,8 +184,8 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     max_span = max(x_span, y_span)
 
     # Pad by 10% (this is completely hacked atm)
-    pad_factor = 0.2
-    half_span = 1.5 * max_span * (1 + pad_factor)
+    pad_factor = 0.0
+    half_span = max_span * (1 + pad_factor)
 
     # Final limits
     ax.set_xlim(-half_span, half_span)
@@ -238,7 +238,7 @@ def plot_waveform_column(
         )
 
     # Now plot the first mic in black
-    ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 1")
+    ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 0")
 
     ax_composite.set_title("Composite Waveforms (All Sources Summed)")
     ax_composite.set_xlabel("Time (s)")
@@ -262,7 +262,7 @@ def plot_waveform_column(
             ax_source.plot(t, waveforms_for_mics[mic_idx], color="lightgray")
 
         # The first mic in highlight color
-        ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 1")
+        ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 0")
 
         ax_source.set_title(f"{src_label} Waveforms")
         ax_source.set_xlabel("Time (s)")
@@ -322,7 +322,7 @@ def plot_overview(
         )
 
     # First mic in black
-    ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 1")
+    ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 0")
     # Plot the measurement points
     ax_composite.scatter(t, composite_waveforms[0], color="gold")
 
@@ -355,7 +355,7 @@ def plot_overview(
         for mic_idx in range(1, num_mics):
             ax_source.plot(t, waveforms_for_mics[mic_idx], color="lightgray")
         # Mic #0 in highlight color
-        ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 1")
+        ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 0")
 
         ax_source.set_title(f"Source {src_label} Waveforms")
         ax_source.set_xlabel("Time (s)")
@@ -466,7 +466,10 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=Fals
         n, m = matrix.shape
         for i in range(n):
             for j in range(m):
-                if polar:
+                if abs(matrix[i,j]) < 0.1:
+                    value_str = "0"
+                elif polar:
+                    print(abs(matrix[i,j]))
                     # Compute magnitude and phase (in degrees)
                     r = np.abs(matrix[i, j])
                     theta = np.angle(matrix[i, j], deg=True)
@@ -491,7 +494,7 @@ def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
 
 
 def plot_equation(
-    Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=False, ratios=[1, 1, 1]
+    Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=True, ratios=[1, 1, 1]
 ):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
@@ -546,8 +549,8 @@ def plot_equation(
 
 
 def plot_time_and_frequency(
-    function_values,
-    fourier_values,
+    function_list,
+    fourier_list,
     time_axis=None,
     frequency_axis=None,
     title=None,
@@ -564,6 +567,19 @@ def plot_time_and_frequency(
         frequency_axis (array-like, optional): Array of frequency points corresponding to fourier_values.
             Defaults to np.arange(len(fourier_values)) if None.
     """
+    # # Ensure function_list and fourier_list are lists
+    # if not isinstance(function_list, list):
+    #     function_list = [function_list]
+    # if not isinstance(fourier_list, list):
+    #     fourier_list = [fourier_list]
+    
+    # num_functions = len(function_list)
+    if np.ndim(function_list) < 2:
+        function_list = np.expand_dims(function_list, axis=0)
+    if np.ndim(fourier_list) < 2:
+        fourier_list = np.expand_dims(fourier_list, axis=0)
+
+
     # Set default axes if not provided
     if time_axis is None:
         time_axis = np.arange(len(function_values))
@@ -575,6 +591,15 @@ def plot_time_and_frequency(
 
     if title is not None:
         fig.suptitle(title, fontsize=16)
+    
+    # Define colors for plotting
+    colors = ["orange", "blue", "green", "red", "purple", "cyan", "magenta"]
+    
+    # Plot the time-domain functions
+    for i, function_values in enumerate(function_list):
+        color = colors[i % len(colors)]
+        label = f"Function {i}"
+        ax_time.plot(time_axis, function_values, color=color, lw=2, label=label)
 
     # Plot the time-domain function
     ax_time.plot(time_axis, function_values, color="orange", lw=2)
@@ -583,22 +608,21 @@ def plot_time_and_frequency(
     ax_time.set_ylabel("Amplitude")
     ax_time.grid(True)
 
-    # Plot the magnitude of the Fourier transform
-    if absolute:
-        ax_freq.plot(
-            frequency_axis,
-            abs(fourier_values),
-            color="orange",
-            lw=2,
-            label="absolute value",
-        )
-    else:
-        ax_freq.plot(
-            frequency_axis, fourier_values.real, color="gold", lw=2, label="real"
-        )
-        ax_freq.plot(
-            frequency_axis, fourier_values.imag, color="red", lw=2, label="imag"
-        )
+    # Plot the Fourier transforms
+    for i, fourier_values in enumerate(fourier_list):
+        color = colors[i % len(colors)]
+        label = f"Fourier {i}"
+        if absolute:
+            ax_freq.plot(
+                frequency_axis, abs(fourier_values), color=color, lw=2, label=f"|{label}|"
+            )
+        else:
+            ax_freq.plot(
+                frequency_axis, fourier_values.real, color=color, lw=2, linestyle="--", label=f"Re({label})"
+            )
+            ax_freq.plot(
+                frequency_axis, fourier_values.imag, color=color, lw=2, linestyle=":", label=f"Im({label})"
+            )
     ax_freq.legend(loc="upper left")
     ax_freq.set_title("Fourier Transform (Frequency Domain)")
     ax_freq.set_xlabel("Frequency")
@@ -606,4 +630,41 @@ def plot_time_and_frequency(
     ax_freq.grid(True)
 
     plt.tight_layout()
+    plt.show()
+
+def plot_matrix_3D(C):
+    """
+    Plot a 3D visualization of the complex-valued C matrix where color represents phase and magnitude.
+    
+    Parameters:
+    - C: A 3D numpy array (num_mics, num_sources, N), where each element is a complex number.
+    """
+    num_mics, num_sources, N = C.shape
+    
+    # Create a figure and 3D axis
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Create grid positions
+    X, Y, Z = np.meshgrid(np.arange(num_sources), np.arange(num_mics), np.arange(N), indexing='ij')
+
+    # Flatten arrays for plotting
+    X_flat = X.flatten()
+    Y_flat = Y.flatten()
+    Z_flat = Z.flatten()
+    C_flat = C.flatten()
+
+    # Convert complex values to RGB colors
+    colors = complex_to_rgb(C)
+    colors_flat = colors.reshape(-1, 3)  # Reshape to a list of RGB colors
+
+    # Plot the 3D scatter with colors
+    ax.scatter(X_flat, Y_flat, Z_flat, c=colors_flat, marker='o', s=20)
+
+    # Labels and title
+    ax.set_xlabel('Sources')
+    ax.set_ylabel('Microphones')
+    ax.set_zlabel('Frequency Index')
+    ax.set_title('3D Visualization of Mixing Matrix C (Color: Phase & Magnitude)')
+
     plt.show()
