@@ -398,7 +398,7 @@ def experiment_6(plot=False):
 
     sources = [
         SoundSource(distance=10, angle=a, frequency=f0, amplitude=1.0)
-        for a in [i * 0.2 for i in range(10)]
+        for a in [i * 0.2 for i in range(60)]
     ]
     sampling_rate = 10 * f0
     duration = max(1 / source.frequency for source in sources)
@@ -431,7 +431,17 @@ def experiment_6(plot=False):
     for idf in range(N):
         Y_pred[:,idf] = C[:,:,idf] @ X[:,idf]
 
+    # Recreating X
     Y = fft(y)
+    X_pred = np.zeros((num_sources, N), dtype=complex)
+    for idf in range(N):
+        C_f_pinv = np.linalg.pinv(C[:,:,idf]) 
+        X_pred[:,idf] = C_f_pinv @ Y[:,idf]
+    plot_equation(X_pred, X, X, titles=("X_pred", "X", ""), ratios=(1,1,0))
+    plot_time_and_frequency(ifft(X_pred),X_pred, t, freqs, title="ifft of X_pred")
+    plot_time_and_frequency(x, X, t, freqs, title="x by definition")
+    
+
 
     
     if plot:

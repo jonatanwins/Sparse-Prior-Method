@@ -469,7 +469,6 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=Fals
                 if abs(matrix[i,j]) < 0.1:
                     value_str = "0"
                 elif polar:
-                    print(abs(matrix[i,j]))
                     # Compute magnitude and phase (in degrees)
                     r = np.abs(matrix[i, j])
                     theta = np.angle(matrix[i, j], deg=True)
