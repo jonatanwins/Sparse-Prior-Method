@@ -2,9 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 
-# if sys.platform == "darwin":
-#     import addcopyfighandler
-
 from plotting import (
     plot_overview,
     plot_Y_comparison,
@@ -278,6 +275,8 @@ def experiment_4(plot=False):
             x_mics, y_mics, sources, sampling_rate=sampling_rate, duration=duration
         )
     )
+
+    # MODIFY from here on for 6
     tau = delays_dict[1][0]
 
     # 1. Time-domain delay
@@ -386,11 +385,52 @@ def experiment_5():
     print("Max absolute error in frequency domain:", freq_error)
 
 
-def experiment_6():
+def experiment_6(plot=False):
     # TODO multiple sources and add noise
-    ...
+
+    num_mics = 8
+    microphone_spacing = 1
+    x_mics, y_mics = initialize_linear_array(num_mics, microphone_spacing)
+
+    # Frequency of interest
+    f0 = 100
+
+    sampling_rate = 10 * f0
+    duration = 1 / f0  # max(1 / f0, 1 / f1)
+    N = int(sampling_rate * duration)
+
+    sources = [
+        SoundSource(distance=20, angle=a, frequency=f0, amplitude=1.0)
+        for a in [i * 0.2 for i in range(4)]
+    ]
+    num_sources = len(sources)
+
+    t, composite_waveforms, individual_waveforms, delays_dict = (
+        simulate_waveforms_multiple_sources(
+            x_mics, y_mics, sources, sampling_rate=sampling_rate, duration=duration
+        )
+    )
+
+    if plot:
+        plot_overview(
+            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+        )
+    # 1. TIME DOMAIN
+    x = np.array([np.sin(2 * np.pi * f0 * t) for i in range(num_sources)])
+    y = composite_waveforms
+
+    # 2. FREQUENCY DOMAIN
+    X = fft(x, axis=1)
+    freqs = fftfreq(N, d=1 / sampling_rate)
+    # f0 is constant
+    C = np.zeros((num_mics, num_sources), dtype=complex)
+
+    # Still just for one frequency
+    for i in range(num_mics):
+        for j, source in enumerate(sources):
+            C[i, j] = np.exp(-1j * omega * delays_dict[j + 1][i])
 
 
 if __name__ == "__main__":
-    experiment_4(True)
-    # experiment_5()
+    # experiment_4(True)
+    experiment_6(True)

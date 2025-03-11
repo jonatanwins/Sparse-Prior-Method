@@ -138,9 +138,11 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
             edgecolor="k",
             label=f"Source {idx+1}",
         )
-    if show_frequency:
-        # Annotate with the frequency attribute, with a slight offset
-        ax.text(sx + 0.05, sy + 0.05, f"{src.frequency} Hz", fontsize=9, color="red")
+        if show_frequency:
+            # Annotate with the frequency attribute, with a slight offset
+            ax.text(
+                sx + 0.05, sy + 0.05, f"{src.frequency:.0f} Hz", fontsize=9, color="red"
+            )
 
     # Plot origin
     # ax.scatter(
