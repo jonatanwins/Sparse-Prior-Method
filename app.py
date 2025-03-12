@@ -427,32 +427,44 @@ def experiment_6(plot=False):
         for j, source in enumerate(sources):
             C[i, j] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
 
-    Y_pred = np.zeros((num_mics,N), dtype=complex)
+    Y_pred = np.zeros((num_mics, N), dtype=complex)
     for idf in range(N):
-        Y_pred[:,idf] = C[:,:,idf] @ X[:,idf]
+        Y_pred[:, idf] = C[:, :, idf] @ X[:, idf]
 
     # Recreating X
     Y = fft(y)
     X_pred = np.zeros((num_sources, N), dtype=complex)
     for idf in range(N):
-        C_f_pinv = np.linalg.pinv(C[:,:,idf]) 
-        X_pred[:,idf] = C_f_pinv @ Y[:,idf]
-    plot_equation(X_pred, X, X, titles=("X_pred", "X", ""), ratios=(1,1,0))
-    plot_time_and_frequency(ifft(X_pred),X_pred, t, freqs, title="ifft of X_pred")
+        C_f_pinv = np.linalg.pinv(C[:, :, idf])
+        X_pred[:, idf] = C_f_pinv @ Y[:, idf]
+    plot_equation(X_pred, X, X, titles=("X_pred", "X", ""), ratios=(1, 1, 0))
+    plot_time_and_frequency(ifft(X_pred), X_pred, t, freqs, title="ifft of X_pred")
     plot_time_and_frequency(x, X, t, freqs, title="x by definition")
-    
 
-
-    
     if plot:
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
         plot_matrix_3D(C)
-        plot_equation(Y_pred[:,1], C[:,:,1], X[:,1], titles=["Y_pred_f0 ", "C_f0", "X_f0"], polar=True, show_values=True)
-        plot_equation(Y, Y_pred, np.array([[1]]), titles=["Y_fft", "Y_pred=C*X", ""],ratios=[1,1,0])
-        plot_time_and_frequency(ifft(Y_pred),Y_pred,t,freqs, title="ifft of Y_pred from CX")
-        plot_time_and_frequency(y,Y,t,freqs, title="y, and Y from fft")
+        plot_equation(
+            Y_pred[:, 1],
+            C[:, :, 1],
+            X[:, 1],
+            titles=["Y_pred_f0 ", "C_f0", "X_f0"],
+            polar=True,
+            show_values=True,
+        )
+        plot_equation(
+            Y,
+            Y_pred,
+            np.array([[1]]),
+            titles=["Y_fft", "Y_pred=C*X", ""],
+            ratios=[1, 1, 0],
+        )
+        plot_time_and_frequency(
+            ifft(Y_pred), Y_pred, t, freqs, title="ifft of Y_pred from CX"
+        )
+        plot_time_and_frequency(y, Y, t, freqs, title="y, and Y from fft")
 
 
 if __name__ == "__main__":

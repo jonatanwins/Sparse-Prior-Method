@@ -466,7 +466,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=Fals
         n, m = matrix.shape
         for i in range(n):
             for j in range(m):
-                if abs(matrix[i,j]) < 0.1:
+                if abs(matrix[i, j]) < 0.1:
                     value_str = "0"
                 elif polar:
                     # Compute magnitude and phase (in degrees)
@@ -571,13 +571,12 @@ def plot_time_and_frequency(
     #     function_list = [function_list]
     # if not isinstance(fourier_list, list):
     #     fourier_list = [fourier_list]
-    
+
     # num_functions = len(function_list)
     if np.ndim(function_list) < 2:
         function_list = np.expand_dims(function_list, axis=0)
     if np.ndim(fourier_list) < 2:
         fourier_list = np.expand_dims(fourier_list, axis=0)
-
 
     # Set default axes if not provided
     if time_axis is None:
@@ -590,10 +589,10 @@ def plot_time_and_frequency(
 
     if title is not None:
         fig.suptitle(title, fontsize=16)
-    
+
     # Define colors for plotting
     colors = ["orange", "blue", "green", "red", "purple", "cyan", "magenta"]
-    
+
     # Plot the time-domain functions
     for i, function_values in enumerate(function_list):
         color = colors[i % len(colors)]
@@ -613,14 +612,28 @@ def plot_time_and_frequency(
         label = f"Fourier {i}"
         if absolute:
             ax_freq.plot(
-                frequency_axis, abs(fourier_values), color=color, lw=2, label=f"|{label}|"
+                frequency_axis,
+                abs(fourier_values),
+                color=color,
+                lw=2,
+                label=f"|{label}|",
             )
         else:
             ax_freq.plot(
-                frequency_axis, fourier_values.real, color=color, lw=2, linestyle="--", label=f"Re({label})"
+                frequency_axis,
+                fourier_values.real,
+                color=color,
+                lw=2,
+                linestyle="--",
+                label=f"Re({label})",
             )
             ax_freq.plot(
-                frequency_axis, fourier_values.imag, color=color, lw=2, linestyle=":", label=f"Im({label})"
+                frequency_axis,
+                fourier_values.imag,
+                color=color,
+                lw=2,
+                linestyle=":",
+                label=f"Im({label})",
             )
     ax_freq.legend(loc="upper left")
     ax_freq.set_title("Fourier Transform (Frequency Domain)")
@@ -631,21 +644,24 @@ def plot_time_and_frequency(
     plt.tight_layout()
     plt.show()
 
+
 def plot_matrix_3D(C):
     """
     Plot a 3D visualization of the complex-valued C matrix where color represents phase and magnitude.
-    
+
     Parameters:
     - C: A 3D numpy array (num_mics, num_sources, N), where each element is a complex number.
     """
     num_mics, num_sources, N = C.shape
-    
+
     # Create a figure and 3D axis
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    
+    ax = fig.add_subplot(111, projection="3d")
+
     # Create grid positions
-    X, Y, Z = np.meshgrid(np.arange(num_sources), np.arange(num_mics), np.arange(N), indexing='ij')
+    X, Y, Z = np.meshgrid(
+        np.arange(num_sources), np.arange(num_mics), np.arange(N), indexing="ij"
+    )
 
     # Flatten arrays for plotting
     X_flat = X.flatten()
@@ -658,12 +674,12 @@ def plot_matrix_3D(C):
     colors_flat = colors.reshape(-1, 3)  # Reshape to a list of RGB colors
 
     # Plot the 3D scatter with colors
-    ax.scatter(X_flat, Y_flat, Z_flat, c=colors_flat, marker='o', s=20)
+    ax.scatter(X_flat, Y_flat, Z_flat, c=colors_flat, marker="o", s=20)
 
     # Labels and title
-    ax.set_xlabel('Sources')
-    ax.set_ylabel('Microphones')
-    ax.set_zlabel('Frequency Index')
-    ax.set_title('3D Visualization of Mixing Matrix C (Color: Phase & Magnitude)')
+    ax.set_xlabel("Sources")
+    ax.set_ylabel("Microphones")
+    ax.set_zlabel("Frequency Index")
+    ax.set_title("3D Visualization of Mixing Matrix C (Color: Phase & Magnitude)")
 
     plt.show()
