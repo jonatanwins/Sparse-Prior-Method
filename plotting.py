@@ -471,8 +471,11 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=Fals
                 elif polar:
                     # Compute magnitude and phase (in degrees)
                     r = np.abs(matrix[i, j])
-                    theta = np.angle(matrix[i, j], deg=True)
-                    value_str = f"{r:.1f}∠{theta:.0f}°"
+                    if polar == "absolute":
+                        value_str = f"{r:.1f}"
+                    else:
+                        theta = np.angle(matrix[i, j], deg=True)
+                        value_str = f"{r:.1f}∠{theta:.0f}°"
                 else:
                     value_str = f"{matrix[i, j].real:.1f}{matrix[i, j].imag:+.1f}j"
                 ax.text(
@@ -482,7 +485,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=Fals
                     ha="center",
                     va="center",
                     color="white",
-                    fontsize=10,
+                    fontsize=6,
                 )
 
 
@@ -493,7 +496,14 @@ def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
 
 
 def plot_equation(
-    Y, C, X, titles=("Y", "C", "X"), show_values=True, polar=True, ratios=[1, 1, 1]
+    Y,
+    C,
+    X,
+    titles=("Y", "C", "X"),
+    show_values=True,
+    polar=True,
+    ratios=[1, 1, 1],
+    symbols=False,
 ):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
@@ -539,12 +549,30 @@ def plot_equation(
     eq_y = (pos1.y0 + pos1.y1) / 2.0
 
     # Add the equation symbols using figure coordinates.
-    fig.text(eq_x, eq_y, "=", fontsize=30, ha="center", va="center")
-    fig.text(mult_x, eq_y, "×", fontsize=30, ha="center", va="center")
+    if symbols:
+        fig.text(eq_x, eq_y, "=", fontsize=30, ha="center", va="center")
+        fig.text(mult_x, eq_y, "×", fontsize=30, ha="center", va="center")
 
-    fig.suptitle(f"Equation: {titles[0]} = {titles[1]}{titles[2]}", fontsize=32)
-    # plt.tight_layout(rect=[0, 0, 1, 0.90])
+        fig.suptitle(f"Equation: {titles[0]} = {titles[1]}{titles[2]}", fontsize=32)
     plt.show()
+
+
+def plot_C_pinv(C, selected_frequency):
+    C_f0 = C[:, :, selected_frequency]
+    C_pinv = np.linalg.pinv(C_f0)
+
+    plot_equation(
+        C_f0,
+        C_f0,
+        C_pinv,
+        titles=(
+            "",
+            rf"$C_{{{selected_frequency}}}$ ",
+            rf"$C_{{{selected_frequency}}}^{{\dagger}}$",
+        ),
+        ratios=(0, C_f0.shape[1], C_pinv.shape[1]),
+        polar="absolute",
+    )
 
 
 def plot_time_and_frequency(

@@ -9,6 +9,7 @@ from plotting import (
     plot_equation,
     plot_time_and_frequency,
     plot_matrix_3D,
+    plot_C_pinv,
 )
 from scipy.fft import fft, ifft, fftfreq, fftshift, rfftfreq
 from DFT import DFT, DFT_matrix
@@ -398,7 +399,7 @@ def experiment_6(plot=False):
 
     sources = [
         SoundSource(distance=10, angle=a, frequency=f0, amplitude=1.0)
-        for a in [i * 0.2 for i in range(60)]
+        for a in [i * 0.2 for i in range(10)]
     ]
     sampling_rate = 10 * f0
     duration = max(1 / source.frequency for source in sources)
@@ -437,22 +438,23 @@ def experiment_6(plot=False):
     for idf in range(N):
         C_f_pinv = np.linalg.pinv(C[:, :, idf])
         X_pred[:, idf] = C_f_pinv @ Y[:, idf]
-    plot_equation(X_pred, X, X, titles=("X_pred", "X", ""), ratios=(1, 1, 0))
-    plot_time_and_frequency(ifft(X_pred), X_pred, t, freqs, title="ifft of X_pred")
-    plot_time_and_frequency(x, X, t, freqs, title="x by definition")
+
+    selected_frequency = 1
+    plot_C_pinv(C, selected_frequency)
 
     if plot:
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
-        plot_matrix_3D(C)
+        # plot_matrix_3D(C)
         plot_equation(
             Y_pred[:, 1],
             C[:, :, 1],
             X[:, 1],
-            titles=["Y_pred_f0 ", "C_f0", "X_f0"],
+            titles=["Y_pred_f0 ", "C_f0 ", "X_f0"],
             polar=True,
             show_values=True,
+            ratios=(1, 10, 1),
         )
         plot_equation(
             Y,
@@ -461,12 +463,11 @@ def experiment_6(plot=False):
             titles=["Y_fft", "Y_pred=C*X", ""],
             ratios=[1, 1, 0],
         )
-        plot_time_and_frequency(
-            ifft(Y_pred), Y_pred, t, freqs, title="ifft of Y_pred from CX"
-        )
-        plot_time_and_frequency(y, Y, t, freqs, title="y, and Y from fft")
+
+        # Reconstructing X
+        plot_equation(X_pred, X, X, titles=("X_pred", "X", ""), ratios=(1, 1, 0))
 
 
 if __name__ == "__main__":
     # experiment_4(True)
-    experiment_6(True)
+    experiment_6(False)

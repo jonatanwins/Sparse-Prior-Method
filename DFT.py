@@ -27,6 +27,11 @@ def DFT(x, sampling_rate=False):
     return X, frequencies
 
 
+def DFTfreq(N, d):
+    frequencies = np.array([k for k in range(N)]) / (d * N)
+    return frequencies
+
+
 def DFT_matrix(x):
     N = len(x)
     k = np.arange(N)
