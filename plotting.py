@@ -560,17 +560,18 @@ def plot_equation(
 def plot_C_pinv(C, selected_frequency):
     C_f0 = C[:, :, selected_frequency]
     C_pinv = np.linalg.pinv(C_f0)
+    id_f0 = C_pinv @ C_f0
 
     plot_equation(
-        C_f0,
+        id_f0,
         C_f0,
         C_pinv,
         titles=(
-            "",
+            rf"$C_{{{selected_frequency}}}^{{\dagger}} \cdot C_{{{selected_frequency}}} \approx I$",
             rf"$C_{{{selected_frequency}}}$ ",
             rf"$C_{{{selected_frequency}}}^{{\dagger}}$",
         ),
-        ratios=(0, C_f0.shape[1], C_pinv.shape[1]),
+        ratios=(id_f0.shape[1], C_f0.shape[1], C_pinv.shape[1]),
         polar="absolute",
     )
 

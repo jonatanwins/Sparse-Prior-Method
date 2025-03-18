@@ -300,14 +300,6 @@ def experiment_4(plot=False):
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
-        # plot_equation(
-        #     Y_dft,
-        #     F,
-        #     y,
-        #     titles=("Y", "F", "y"),
-        #     polar=True,
-        #     ratios=[1, 10, 1],
-        # )
 
         plot_equation(Y_fft, Y_pred, X, ["Y_fft", "Y_pred ", "X"], polar=True)
         y_pred = ifft(Y_pred)
@@ -398,8 +390,9 @@ def experiment_6(plot=False):
     f0 = 100
 
     sources = [
-        SoundSource(distance=10, angle=a, frequency=f0, amplitude=1.0)
-        for a in [i * 0.2 for i in range(10)]
+        SoundSource(distance=10, angle=a, frequency=f0, amplitude=a * 0.1)
+        # TODO implementere fase og gjøre tilfeldig og justere ampltiude
+        for a in [i * 0.2 for i in range(5)]
     ]
     sampling_rate = 10 * f0
     duration = max(1 / source.frequency for source in sources)
@@ -441,8 +434,9 @@ def experiment_6(plot=False):
 
     selected_frequency = 1
     plot_C_pinv(C, selected_frequency)
-
     if plot:
+
+        plot_matrix_3D(C)
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
@@ -470,4 +464,4 @@ def experiment_6(plot=False):
 
 if __name__ == "__main__":
     # experiment_4(True)
-    experiment_6(False)
+    experiment_6(True)
