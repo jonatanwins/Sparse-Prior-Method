@@ -1,8 +1,8 @@
-import matplotlib.pyplot as plt
-from matplotlib.colors import hsv_to_rgb
-
 from itertools import cycle
+
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import hsv_to_rgb
 
 colors = cycle(["#FFA343", "#FF1744", "#9A4DFF", "#00BFA5", "#3498DB"])
 yellow = "#FFA343"
@@ -120,7 +120,7 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     ax.scatter(
         x_positions,
         y_positions,
-        s=60,
+        s=30,
         marker="o",
         color="blue",
         edgecolor="k",
@@ -133,7 +133,7 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
         ax.scatter(
             sx,
             sy,
-            s=80,
+            s=50,
             marker="^",
             edgecolor="k",
             label=f"Source {idx}",
@@ -143,17 +143,14 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
             ax.text(
                 sx + 0.05, sy + 0.05, f"{src.frequency:.0f} Hz", fontsize=9, color="red"
             )
-
-    # Plot origin
-    # ax.scatter(
-    #     0,
-    #     0,
-    #     s=60,
-    #     marker="s",
-    #     color="black",
-    #     edgecolor="k",
-    #     label="Origin",
-    # )
+            if src.phase != 0.0:
+                ax.text(
+                    sx + 0.05,
+                    sy + 0.6,
+                    f"{1000*src.phase:.0f}ms delay",
+                    fontsize=9,
+                    color="orange",
+                )
 
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
@@ -184,12 +181,14 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     max_span = max(x_span, y_span)
 
     # Pad by 10% (this is completely hacked atm)
-    pad_factor = 0.0
-    half_span = max_span * (1 + pad_factor)
+    pad_factor = 0.1
+    half_span = max_span / 2 * (1 + pad_factor)
 
     # Final limits
-    ax.set_xlim(-half_span, half_span)
-    ax.set_ylim(-half_span, half_span)
+    # ax.set_xlim(-half_span, half_span)
+    # ax.set_ylim(-half_span, half_span)
+    ax.set_xlim(-2 * half_span, 2 * half_span)
+    # ax.set_ylim(-10, 10)
     # print(f"{half_span=}")
 
     # quick fix, something weird about xlim on plots straight to axis
@@ -293,7 +292,7 @@ def plot_overview(
     n_sources = len(sources)
     total_rows = n_sources + 1  # 1 composite row + 1 row per source
 
-    fig = plt.figure(figsize=(14, 2.5 * total_rows))
+    fig = plt.figure(figsize=(18, 2.5 * total_rows))
     gs = fig.add_gridspec(
         total_rows, 2, width_ratios=[1, 1], height_ratios=[1] * total_rows
     )
@@ -364,6 +363,69 @@ def plot_overview(
         ax_source.legend(loc="upper right")
 
     plt.tight_layout()
+    plt.show()
+
+
+def plot_signals_side_by_side(
+    t,
+    x_signals,
+    y_signals,
+    x_sources,
+    labels=("x Signals", "y Signals"),
+    first_mic_colors=None,
+):
+    """
+    Plot two sets of signals (x and y) side by side in two columns, annotating only the X signals with frequency and phase,
+    ensuring each pair of signals (x,y) shares the same axis scale, and setting labels as titles for each column.
+
+    Parameters:
+        t (array): Time array for the x-axis.
+        x_signals (np.array): 2D array of shape (num_signals, len(t)) for the left column.
+        y_signals (np.array): 2D array of shape (num_signals, len(t)) for the right column.
+        x_sources (list): List of source objects for x_signals, each with frequency and phase attributes.
+        labels (tuple): Titles for the left and right columns.
+        first_mic_colors (list, optional): Highlight colors for the first signal.
+    """
+    num_signals = max(x_signals.shape[0], y_signals.shape[0])
+
+    fig = plt.figure(figsize=(14, 2.5 * num_signals))
+    gs = fig.add_gridspec(num_signals, 2, width_ratios=[1, 1])
+
+    if first_mic_colors is None:
+        first_mic_colors = ["#FF1744", "#00BFA5", "#FFA343", "#9A4DFF", "#3498DB"]
+
+    # Add column titles explicitly
+    fig.text(0.25, 0.96, labels[0], ha="center", fontsize=16, fontweight="bold")
+    fig.text(0.75, 0.96, labels[1], ha="center", fontsize=16, fontweight="bold")
+
+    for i in range(num_signals):
+        highlight_color = first_mic_colors[i % len(first_mic_colors)]
+
+        # Determine the shared axis limits
+        y_max = max(np.max(np.abs(x_signals[i])), np.max(np.abs(y_signals[i])))
+
+        # Left column: x Signals
+        ax_x = fig.add_subplot(gs[i, 0])
+        ax_x.plot(t, x_signals[i], color=highlight_color, label=f"Source {i}")
+        freq = x_sources[i].frequency
+        phase = x_sources[i].phase
+        ax_x.set_title(f"Freq: {freq:.0f} Hz, Phase: {1000*phase:.0f}ms")
+        ax_x.set_xlabel("Time (s)")
+        ax_x.set_ylabel("Amplitude")
+        ax_x.set_ylim(-y_max, y_max)
+        ax_x.grid(True)
+        ax_x.legend(loc="upper right")
+
+        # Right column: y Signals
+        ax_y = fig.add_subplot(gs[i, 1])
+        ax_y.plot(t, y_signals[i], color=highlight_color, label=f"{i}")
+        ax_y.set_xlabel("Time (s)")
+        ax_y.set_ylabel("Amplitude")
+        ax_y.set_ylim(-y_max, y_max)
+        ax_y.grid(True)
+        ax_y.legend(loc="upper right")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
 
