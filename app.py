@@ -1,3 +1,4 @@
+import random
 import sys
 
 import matplotlib.pyplot as plt
@@ -128,6 +129,24 @@ def simulate_waveforms_multiple_sources(
     return t, composite_waveforms, individual_waveforms, delays_dict
 
 
+def s_sparse_sources(s, sources, seed=2025):
+    sparse_sources = [
+        SoundSource(
+            distance=src.distance,
+            angle=src.angle,
+            frequency=src.frequency,
+            amplitude=0,
+            phase=src.phase,
+        )
+        for src in sources
+    ]
+    random.seed(seed)
+    indicies = random.sample(range(len(sources)), s)
+    for i in indicies:
+        sparse_sources[i] = sources[i]
+    return sparse_sources, indicies
+
+
 # ------------------------
 # Experiments
 # ------------------------
@@ -136,8 +155,9 @@ def simulate_waveforms_multiple_sources(
 def experiment_7(plot=False):
     # TODO multiple sources and add noise
 
-    no_sources = 12
-    num_mics = 10
+    no_sources = 8
+    s_sparse = 3
+    num_mics = 3
     radius = 1
     x_mics, y_mics = initialize_circular_array(num_mics, radius)
 
@@ -149,11 +169,13 @@ def experiment_7(plot=False):
             distance=10,
             angle=0.3 * a,
             frequency=f0,
-            amplitude=2 + a,
-            phase=0,
+            amplitude=2,
+            phase=0.001 * a,
         )
         for a in range(no_sources)
     ]
+    sources, _ = s_sparse_sources(s_sparse, sources)
+
     sampling_rate = 10 * f0
     duration = max(1 / source.frequency for source in sources)
     N = int(sampling_rate * duration)
@@ -210,20 +232,20 @@ def experiment_7(plot=False):
         )
 
         # Validating mixing model
-        plot_equation(
-            Y,
-            Y_pred,
-            np.array([[1]]),
-            titles=["Y_fft", "Y_pred=C*X", ""],
-            ratios=[1, 1, 0],
-        )
+        # plot_equation(
+        #     Y,
+        #     Y_pred,
+        #     np.array([[1]]),
+        #     titles=["Y_fft", "Y_pred=C*X", ""],
+        #     ratios=[1, 1, 0],
+        # )
 
         # Reconstructing X
         plot_equation(
             X_pred, X, np.array([[1]]), titles=("X_pred", "X", ""), ratios=(1, 1, 0)
         )
 
-        plot_signals_side_by_side(t, ifft(X_pred), x, sources, labels=("x_pred", "x"))
+        # plot_signals_side_by_side(t, ifft(X_pred), x, sources, labels=("x_pred", "x"))
 
         selected_frequency = 1
         plot_C_pinv(C, selected_frequency)
