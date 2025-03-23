@@ -502,7 +502,9 @@ def complex_to_rgb(matrix):
     return rgb
 
 
-def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=False):
+def plot_complex_matrix_on_ax(
+    ax, matrix, title="", show_values=True, polar=False, font_size=6
+):
     """
     Plot a complex matrix on the provided Axes object using an HSV mapping.
 
@@ -547,7 +549,7 @@ def plot_complex_matrix_on_ax(ax, matrix, title="", show_values=True, polar=Fals
                     ha="center",
                     va="center",
                     color="white",
-                    fontsize=6,
+                    fontsize=font_size,
                 )
 
 
@@ -566,6 +568,7 @@ def plot_equation(
     polar=True,
     ratios=[1, 1, 1],
     symbols=False,
+    font_size=6,
 ):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
@@ -588,13 +591,28 @@ def plot_equation(
 
     # Plot each matrix on its own axis.
     plot_complex_matrix_on_ax(
-        axs[0], Y, title=titles[0], show_values=show_values, polar=polar
+        axs[0],
+        Y,
+        title=titles[0],
+        show_values=show_values,
+        polar=polar,
+        font_size=font_size,
     )
     plot_complex_matrix_on_ax(
-        axs[1], C, title=titles[1], show_values=show_values, polar=polar
+        axs[1],
+        C,
+        title=titles[1],
+        show_values=show_values,
+        polar=polar,
+        font_size=font_size,
     )
     plot_complex_matrix_on_ax(
-        axs[2], X, title=titles[2], show_values=show_values, polar=polar
+        axs[2],
+        X,
+        title=titles[2],
+        show_values=show_values,
+        polar=polar,
+        font_size=font_size,
     )
 
     # Get the positions of the axes in figure coordinates.

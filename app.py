@@ -226,10 +226,12 @@ def experiment_7(plot=False):
         X_pred[:, idf] = C_f_pinv @ Y[:, idf]
 
     # 3. PLOTTING
+
     if plot:
         plot_overview(
             x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
         )
+        plot_equation(Y[:, 1], C[:, :, 1], X[:, 1], ratios=(1, 8, 1), font_size=12)
 
         # Validating mixing model
         # plot_equation(
@@ -252,4 +254,4 @@ def experiment_7(plot=False):
 
 
 if __name__ == "__main__":
-    experiment_7(True)
+    experiment_7(True)q
