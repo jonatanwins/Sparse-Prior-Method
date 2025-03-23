@@ -147,6 +147,47 @@ def s_sparse_sources(s, sources, seed=2025):
     return sparse_sources, indicies
 
 
+def recover_x(X_2s, len_x):
+    """ "
+    Theorem 2.15 - Pronys method?
+    Reconstructs s-sparse X from 2s Y measurements
+    """
+    s = len(X_2s) // 2
+    A = np.zeros((s, s), dtype=complex)
+
+    for k in range(s):
+        A[:, s - k - 1] = X_2s[k : k + s]  # Sliding X_2s
+
+    b = -X_2s[s : 2 * s]
+    w = np.linalg.solve(A, b)
+
+    # plot_equation(A, w, b, titles=("A", "w", "b"))
+
+    v = np.concatenate(([1], w, np.zeros(len_x - (s + 1))))
+    # plot_equation(
+    #     v, w, np.zeros(len_x - (s + 1)), titles=("v", "w", "np.zeros(len_x- (s+1))")
+    # )
+
+    v_ifft = ifft(v)
+    # plot_equation(v, v_ifft, x_true, titles=("v", "v_ifft", "x_true"))
+    inds = np.where(np.abs(v_ifft) <= 1e-5)[0]
+
+    exp_matrix = np.exp(-2j * np.pi * np.outer(np.arange(s), inds) / len_x)
+
+    x_S = np.linalg.solve(exp_matrix, X_2s[:s])
+    plot_equation(
+        exp_matrix,
+        x_S,
+        X_2s[:s],
+        titles=(r"$ \mathcal{F}$", r"$x_S$", r"$X_{2s}[:2s]$"),
+    )
+
+    x = np.zeros(len_x, dtype=complex)
+    x[inds] = x_S
+
+    return x
+
+
 # ------------------------
 # Experiments
 # ------------------------
@@ -253,5 +294,18 @@ def experiment_7(plot=False):
         plot_C_pinv(C, selected_frequency)
 
 
+def experiment_8():
+    N = 32
+    x = np.zeros(N, dtype=complex)
+    non_zero_inds = [3, 5, 9, 12]  # known as S in Foucart MICS
+    x[non_zero_inds] = [1, 4, 3, 2]
+    s = len(non_zero_inds)
+
+    X = fft(x)
+    x_recovered = recover_x(X[: 2 * s], N)
+    # plot_equation(x_recovered, x, X, titles=("x_recovered", "x", "X"))
+    plot_equation(x, X, X[: 2 * s], titles=("x", "X", r"$X_{2s}$"), font_size=10)
+
+
 if __name__ == "__main__":
-    experiment_7(True)q
+    experiment_8()

@@ -503,7 +503,7 @@ def complex_to_rgb(matrix):
 
 
 def plot_complex_matrix_on_ax(
-    ax, matrix, title="", show_values=True, polar=False, font_size=6
+    ax, matrix, title="", show_values=True, polar=False, font_size=8
 ):
     """
     Plot a complex matrix on the provided Axes object using an HSV mapping.
@@ -568,7 +568,7 @@ def plot_equation(
     polar=True,
     ratios=[1, 1, 1],
     symbols=False,
-    font_size=6,
+    font_size=8,
 ):
     """
     Plot the matrices Y, C, and X side by side as if in the equation:
