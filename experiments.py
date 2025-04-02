@@ -8,6 +8,7 @@ from app import (
     initialize_linear_array,
     simulate_waveforms_multiple_sources,
 )
+from DFT import DFTfreq
 from plotting import (
     plot_C_pinv,
     plot_complex_matrix,
@@ -18,10 +19,12 @@ from plotting import (
 )
 
 
-def experiment_1():
+def experiment_1(microphone_radius=0.3):
+    """
+    Basic setup of microphones and showcase of DFT
+    """
     array_size = 8
     microphone_spacing = 0.1
-    microphone_radius = 0.2
 
     if microphone_radius is not None:
         x_mics, y_mics = initialize_circular_array(array_size, microphone_radius)
@@ -29,19 +32,38 @@ def experiment_1():
         x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
 
     sources = [
-        SoundSource(distance=2.0, angle=np.pi / 4, frequency=100, amplitude=1.0),
+        SoundSource(distance=3.0, angle=np.pi / 4, frequency=100, amplitude=1.0),
         SoundSource(distance=3.0, angle=np.pi / 3, frequency=150, amplitude=0.8),
         SoundSource(distance=3.0, angle=np.pi / 5, frequency=300, amplitude=0.8),
     ]
 
+    sampling_rate = 10 * max([src.frequency for src in sources])
+    duration = 1 * max(1 / source.frequency for source in sources)
+    N = int(sampling_rate * duration)
+
     t, composite_waveforms, individual_waveforms, delays_dict = (
-        simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
+        simulate_waveforms_multiple_sources(
+            x_mics, y_mics, sources, sampling_rate, duration
+        )
     )
 
     plot_overview(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
 
+    X = fft(composite_waveforms[0], N)
+    freq = DFTfreq(N, 1 / sampling_rate)
+    half = len(freq) // 4
+    plot_time_and_frequency(
+        composite_waveforms[0],
+        X[:half],
+        t,
+        freq[:half],
+    )
+
 
 def experiment_2():
+    """
+    Showing the Fourier transform
+    """
     array_size = 8
     microphone_spacing = 0.1
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
@@ -52,8 +74,12 @@ def experiment_2():
         SoundSource(distance=2.0, angle=np.pi / 6, frequency=300, amplitude=0.3),
     ]
 
+    sampling_rate = 10 * max([src.frequency for src in sources])
+
     t, composite_waveforms, individual_waveforms, delays_dict = (
-        simulate_waveforms_multiple_sources(x_mics, y_mics, sources)
+        simulate_waveforms_multiple_sources(
+            x_mics, y_mics, sources, sampling_rate=sampling_rate
+        )
     )
 
     plot_overview(x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms)
@@ -79,6 +105,9 @@ def experiment_2():
 
 
 def experiment_3(plot=False, cosine=False):
+    """
+    First naive attempt at mixing model
+    """
     array_size = 8
     microphone_spacing = 0.1
     x_mics, y_mics = initialize_linear_array(array_size, microphone_spacing)
@@ -143,7 +172,9 @@ def experiment_3(plot=False, cosine=False):
 
 
 def experiment_4(plot=False):
-    # really simple dft
+    """
+    Second failed attempt at troubleshooting a simple system
+    """
 
     array_size = 1
     microphone_spacing = 0.1
@@ -206,6 +237,9 @@ def experiment_4(plot=False):
 
 
 def experiment_5():
+    """
+    Manual computation of time delay
+    """
     # Parameters
     sampling_rate = 100  # Sampling frequency in Hz
     duration = 1.0  # Duration in seconds
@@ -378,4 +412,4 @@ def experiment_view_different_phases(plot=False):
 
 
 if __name__ == "__main__":
-    ...
+    experiment_view_different_phases(plot=True)

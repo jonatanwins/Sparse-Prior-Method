@@ -116,6 +116,7 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     """
     Plot microphones, sources, and origin on the given Axes object.
     """
+
     # Plot microphones
     ax.scatter(
         x_positions,
@@ -155,7 +156,7 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
     ax.set_ylabel("Y Position (m)")
-    ax.axis("equal")
+    # ax.axis("equal")  # This causes problems with xlim and ylim
     ax.grid(True)
     ax.legend()
 
@@ -181,19 +182,19 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     max_span = max(x_span, y_span)
 
     # Pad by 10% (this is completely hacked atm)
-    pad_factor = 0.1
-    half_span = max_span / 2 * (1 + pad_factor)
+    pad_factor = 0.3
+    half_span = max_span / 1 * (1 + pad_factor)
 
     # Final limits
     # ax.set_xlim(-half_span, half_span)
     # ax.set_ylim(-half_span, half_span)
-    ax.set_xlim(-2 * half_span, 2 * half_span)
-    # ax.set_ylim(-10, 10)
-    # print(f"{half_span=}")
 
-    # quick fix, something weird about xlim on plots straight to axis
-    # ax.set_xlim(-5, 5)
-    # ax.set_ylim(-5, 5)
+    # ax.set_xlim(x_min, x_max)
+    # ax.set_ylim(y_min, y_max)
+
+    lower_bound = min(x_min, y_min) - pad_factor * max_span
+    upper_bound = max(x_max, y_max) + pad_factor * max_span
+    ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
 
 
 def plot_waveform_column(
@@ -307,9 +308,9 @@ def plot_overview(
     # 2) Right column, row 0: Composite waveforms
     #    Highlight Mic #1 in black, others in light gray
     # -------------------------------------------------------------------------
-    ax_composite = fig.add_subplot(gs[0, 1])
-
     num_mics = composite_waveforms.shape[0]
+
+    ax_composite = fig.add_subplot(gs[0, 1])
     # The rest in light gray
     for mic_idx in range(1, num_mics):
         ax_composite.plot(
