@@ -51,12 +51,15 @@ def initialize_circular_array(array_size, radius):
 
 
 class SoundSource:
-    def __init__(self, distance, angle, frequency, amplitude=1.0, phase=0.0):
+    def __init__(
+        self, distance, angle, frequency, amplitude=1.0, phase=0.0, function=np.sin
+    ):
         self.distance = distance
         self.angle = angle
         self.frequency = frequency
         self.amplitude = amplitude
-        self.phase = phase
+        self.phase = phase  # in radians
+        self.function = function
 
     def get_position(self):
         x = self.distance * np.sin(self.angle)
@@ -76,7 +79,7 @@ def calculate_delays(x_positions, y_positions, source: SoundSource):
     return delays
 
 
-def simulate_waveform_for_source(x_positions, y_positions, src, t, cosine=False):
+def simulate_waveform_for_source(x_positions, y_positions, src, t):
     """
     Compute the waveform at each microphone due to one sound source.
 
@@ -86,15 +89,13 @@ def simulate_waveform_for_source(x_positions, y_positions, src, t, cosine=False)
     """
 
     delays = calculate_delays(x_positions, y_positions, src)
-    # BUG
-
-    f = np.cos if cosine else np.sin
 
     # at the microphone, hence the shift
     # BUG SQUASH: the shift is negative as we are at an earlier stage of the signal
     waveforms = np.array(
         [
-            src.amplitude * f(2 * np.pi * src.frequency * (t - delay + src.phase))
+            src.amplitude
+            * src.function(2 * np.pi * src.frequency * (t - delay) + src.phase)
             for delay in delays
         ]
     )
@@ -103,7 +104,7 @@ def simulate_waveform_for_source(x_positions, y_positions, src, t, cosine=False)
 
 
 def simulate_waveforms_multiple_sources(
-    x_positions, y_positions, sources, sampling_rate=10_000, duration=None, cosine=False
+    x_positions, y_positions, sources, sampling_rate, duration=None
 ):
     """
     TODO
@@ -120,7 +121,7 @@ def simulate_waveforms_multiple_sources(
 
     for idx, source in enumerate(sources):
         waveform, delays = simulate_waveform_for_source(
-            x_positions, y_positions, source, t, cosine=cosine
+            x_positions, y_positions, source, t
         )  # same t
         composite_waveforms += waveform
         individual_waveforms[idx] = waveform
@@ -137,6 +138,7 @@ def s_sparse_sources(s, sources, seed=2025):
             frequency=src.frequency,
             amplitude=0,
             phase=src.phase,
+            function=src.function,
         )
         for src in sources
     ]
@@ -219,7 +221,7 @@ def experiment_7(plot=False):
             angle=0.3 * a,
             frequency=f0,
             amplitude=2,
-            phase=0.001 * a,
+            phase=0.3 * a,
         )
         for a in range(no_sources)
     ]
@@ -240,8 +242,8 @@ def experiment_7(plot=False):
     # 1. TIME DOMAIN
     x = np.array(
         [
-            source.amplitude * np.sin(2 * np.pi * source.frequency * (t + source.phase))
-            for source in sources
+            src.amplitude * src.function(2 * np.pi * src.frequency * (t) + src.phase)
+            for src in sources
         ]
     )
 
@@ -303,6 +305,9 @@ def experiment_7(plot=False):
 
 
 def experiment_8():
+    """
+    Dummy example testing Pronys method
+    """
     N = 32
     x = np.zeros(N, dtype=complex)
     non_zero_inds = [3, 5, 9, 12]  # known as S in Foucart MICS
@@ -316,4 +321,4 @@ def experiment_8():
 
 
 if __name__ == "__main__":
-    experiment_1()
+    experiment_7(True)

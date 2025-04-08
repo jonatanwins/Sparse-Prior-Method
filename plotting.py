@@ -148,7 +148,7 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
                 ax.text(
                     sx + 0.05,
                     sy + 0.6,
-                    f"{1000*src.phase:.0f}ms delay",
+                    f"phase: {src.phase:.2f} rad",
                     fontsize=9,
                     color="orange",
                 )
@@ -410,7 +410,7 @@ def plot_signals_side_by_side(
         ax_x.plot(t, x_signals[i], color=highlight_color, label=f"Source {i}")
         freq = x_sources[i].frequency
         phase = x_sources[i].phase
-        ax_x.set_title(f"Freq: {freq:.0f} Hz, Phase: {1000*phase:.0f}ms")
+        ax_x.set_title(f"Freq: {freq:.0f} Hz, Phase: {phase:.2f} rad")
         ax_x.set_xlabel("Time (s)")
         ax_x.set_ylabel("Amplitude")
         ax_x.set_ylim(-y_max, y_max)
