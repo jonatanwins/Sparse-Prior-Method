@@ -112,7 +112,15 @@ def plot_delays(x_positions, y_positions, sources, t, composite_waveforms, delay
     plt.show()
 
 
-def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
+def plot_geometry_on_ax(
+    ax,
+    x_positions,
+    y_positions,
+    sources,
+    show_frequency=True,
+    mic_color="crimson",
+    source_color="dodgerblue",
+):
     """
     Plot microphones, sources, and origin on the given Axes object.
     """
@@ -123,10 +131,14 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
         y_positions,
         s=30,
         marker="o",
-        color="blue",
+        color=mic_color,
         edgecolor="k",
         label="Microphones",
     )
+
+    # Annotate each microphone with its microphone number (starting from 0)
+    for idx, (x, y) in enumerate(zip(x_positions, y_positions)):
+        ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=9, color=mic_color)
 
     # Plot each source
     for idx, src in enumerate(sources):
@@ -137,21 +149,24 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
             s=50,
             marker="^",
             edgecolor="k",
-            label=f"Source {idx}",
+            color=source_color,
+            label="Sources" if idx == 0 else None,
         )
         if show_frequency:
-            # Annotate with the frequency attribute, with a slight offset
-            ax.text(
-                sx + 0.05, sy + 0.05, f"{src.frequency:.0f} Hz", fontsize=9, color="red"
+
+            # Construct the annotation string with frequency and (if applicable) phase
+            label = f"{src.frequency:.0f} Hz" + (
+                f"\n{src.phase:.2f} rad" if src.phase != 0.0 else ""
             )
-            if src.phase != 0.0:
-                ax.text(
-                    sx + 0.05,
-                    sy + 0.6,
-                    f"phase: {src.phase:.2f} rad",
-                    fontsize=9,
-                    color="orange",
-                )
+
+            # Annotate at the desired offset
+            ax.text(
+                sx + 0.05,
+                sy + 0.05,
+                label,
+                fontsize=9,
+                color=source_color,
+            )
 
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
@@ -177,24 +192,24 @@ def plot_geometry(ax, x_positions, y_positions, sources, show_frequency=True):
     # Determine required span to make the plot square
     x_span = x_max - x_min
     y_span = y_max - y_min
-    # print(f"{x_max=}, {x_min=}, {y_max=}, {y_min}")
-    # print([src.get_position() for src in sources])
     max_span = max(x_span, y_span)
 
-    # Pad by 10% (this is completely hacked atm)
+    # Pad by 30%
     pad_factor = 0.3
-    half_span = max_span / 1 * (1 + pad_factor)
-
-    # Final limits
-    # ax.set_xlim(-half_span, half_span)
-    # ax.set_ylim(-half_span, half_span)
-
-    # ax.set_xlim(x_min, x_max)
-    # ax.set_ylim(y_min, y_max)
 
     lower_bound = min(x_min, y_min) - pad_factor * max_span
     upper_bound = max(x_max, y_max) + pad_factor * max_span
     ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
+
+
+def plot_geometry_auto(
+    x_positions, y_positions, sources, show_frequency=True, figsize=(8, 8)
+):
+
+    fig, ax = plt.subplots(figsize=figsize)
+    # Call your existing plot_geometry function
+    plot_geometry_on_ax(ax, x_positions, y_positions, sources, show_frequency)
+    plt.show()
 
 
 def plot_waveform_column(
@@ -271,6 +286,42 @@ def plot_waveform_column(
         ax_source.legend(loc="upper right")
 
 
+def plot_composite_overview(
+    t, composite_waveforms, figsize=(10, 6), sample_color="crimson"
+):
+    """
+    Create a figure that displays the composite waveforms (all sources summed) at the microphones.
+
+    Parameters:
+        t (array-like): Time axis values.
+        composite_waveforms (np.array): 2D array (num_mics x len(t)) representing the composite signals
+                                        at each microphone.
+    """
+    num_mics = composite_waveforms.shape[0]
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot all microphones except the first in light gray.
+    for mic_idx in range(1, num_mics):
+        ax.plot(
+            t,
+            composite_waveforms[mic_idx],
+            color="lightgray",
+            label=f"Other Microphones" if mic_idx == 1 else None,
+        )  # Only add label once.
+
+    # Plot the first microphone in black and highlight its points in gold.
+    ax.plot(t, composite_waveforms[0], color="black", label="Mic 0")
+    ax.scatter(t, composite_waveforms[0], color=sample_color, zorder=3)
+
+    ax.set_title("Composite Waveforms (All Sources Summed)")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Amplitude")
+    ax.grid(True)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_overview(
     x_positions,
     y_positions,
@@ -302,7 +353,7 @@ def plot_overview(
     # 1) Left column: geometry (spans all rows in the first column)
     # -------------------------------------------------------------------------
     ax_geometry = fig.add_subplot(gs[:, 0])
-    plot_geometry(ax_geometry, x_positions, y_positions, sources)
+    plot_geometry_on_ax(ax_geometry, x_positions, y_positions, sources)
 
     # -------------------------------------------------------------------------
     # 2) Right column, row 0: Composite waveforms
