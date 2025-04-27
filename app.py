@@ -290,7 +290,6 @@ def run_simulation(
     # Inverse FFT to recover time-domain source signals.
     x_pred = ifft(X_pred, axis=1)
 
-    # Package results into a SimpleNamespace.
     sim_result = SimpleNamespace(
         t=t,
         composite_waveforms=composite_waveforms,

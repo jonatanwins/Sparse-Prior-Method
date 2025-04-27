@@ -322,6 +322,88 @@ def plot_composite_overview(
     plt.show()
 
 
+def plot_waveform_column_auto(
+    t, composite_waveforms, individual_waveforms, width=8, height_per_cell=2.5
+):
+    """
+    Create a figure that plots only the waveform plots:
+
+      - Row 0: Composite waveforms (all sources summed)
+      - Rows 1..N: Each individual source's waveforms (each in its own subplot)
+
+    For every waveform plot:
+      - The first microphone (mic #0) is highlighted (in black for composite and in a unique color for each source).
+      - All other microphone waveforms are plotted in light gray.
+
+    Parameters:
+      t : array-like
+          Time vector for the x-axis.
+      composite_waveforms : numpy.ndarray
+          2D array of shape (num_mics, len(t)). Represents the composite waveform data.
+      individual_waveforms : dict
+          Dictionary with keys representing source labels and values being 2D arrays (one per source)
+          of shape (num_mics, len(t)) that contain the waveform data from each microphone.
+    """
+    # Determine the number of sources and number of rows (1 composite + one per source)
+    n_sources = len(individual_waveforms)
+    total_rows = n_sources + 1
+
+    # Create a figure with a grid of subplots (one column only)
+    fig = plt.figure(figsize=(width, height_per_cell * total_rows))
+    gs = fig.add_gridspec(total_rows, 1, height_ratios=[1] * total_rows)
+
+    # ------------------------------
+    # 1) Composite Waveform (Row 0)
+    # ------------------------------
+    num_mics = composite_waveforms.shape[0]
+    ax_composite = fig.add_subplot(gs[0, 0])
+
+    # Plot all mics except the first in light gray
+    for mic_idx in range(1, num_mics):
+        ax_composite.plot(t, composite_waveforms[mic_idx], color="lightgray")
+
+    # Plot the first mic in black with highlighted markers
+    ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 0")
+    ax_composite.scatter(t, composite_waveforms[0], color="gold")
+
+    ax_composite.set_title("Composite Waveforms (All Sources Summed)")
+    ax_composite.set_xlabel("Time (s)")
+    ax_composite.set_ylabel("Amplitude")
+    ax_composite.grid(True)
+    ax_composite.legend(loc="upper right")
+
+    # ---------------------------------------------------------
+    # 2) Individual Source Waveforms (Rows 1..n_sources)
+    # ---------------------------------------------------------
+    # Define a small palette of highlight colors for each source's first mic.
+    # These will be cycled if there are more sources than colors.
+    first_mic_colors = ["#FF1744", "#00BFA5", "#FFA343", "#9A4DFF", "#3498DB"]
+
+    for i, (src_label, waveforms_for_mics) in enumerate(
+        individual_waveforms.items(), start=1
+    ):
+        ax_source = fig.add_subplot(gs[i, 0])
+
+        # Choose a highlight color for this source's first mic
+        highlight_color = first_mic_colors[(i - 1) % len(first_mic_colors)]
+
+        # Plot all microphones except the first in light gray
+        for mic_idx in range(1, num_mics):
+            ax_source.plot(t, waveforms_for_mics[mic_idx], color="lightgray")
+
+        # Plot the first mic in the chosen highlight color
+        ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 0")
+
+        ax_source.set_title(f"Source {src_label} Waveforms")
+        ax_source.set_xlabel("Time (s)")
+        ax_source.set_ylabel("Amplitude")
+        ax_source.grid(True)
+        ax_source.legend(loc="upper right")
+
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_overview(
     x_positions,
     y_positions,
@@ -330,6 +412,7 @@ def plot_overview(
     composite_waveforms,
     individual_waveforms,
 ):
+    # TODO reuse plot_waveform_column_auto
     """
     Create a single figure with:
       - Left column (spans all rows): Microphone array & source positions
@@ -844,3 +927,7 @@ def plot_matrix_3D(C):
     ax.set_title("3D Visualization of Mixing Matrix C (Color: Phase & Magnitude)")
 
     plt.show()
+
+
+def wrapper_plot_geometry(sim, figsize=(8, 8)):
+    plot_geometry_auto(sim.x_mics, sim.y_mics, sim.sources, figsize=figsize)
