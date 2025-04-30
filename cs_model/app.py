@@ -298,7 +298,7 @@ def run_simulation(
         x_time=x_time,
         y_time=y_time,
         X=X,
-        Y_fft=Y_fft,
+        Y=Y_fft,
         freqs=freqs,
         C=C,
         C_pinv=C_pinv,

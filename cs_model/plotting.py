@@ -404,14 +404,7 @@ def plot_waveform_column_auto(
     plt.show()
 
 
-def plot_overview(
-    x_positions,
-    y_positions,
-    sources,
-    t,
-    composite_waveforms,
-    individual_waveforms,
-):
+def plot_overview(sim):
     # TODO reuse plot_waveform_column_auto
     """
     Create a single figure with:
@@ -424,7 +417,7 @@ def plot_overview(
     """
 
     # We'll have N+1 rows on the right: 1 for composite + N for individual sources
-    n_sources = len(sources)
+    n_sources = len(sim.sources)
     total_rows = n_sources + 1  # 1 composite row + 1 row per source
 
     fig = plt.figure(figsize=(18, 2.5 * total_rows))
@@ -436,29 +429,29 @@ def plot_overview(
     # 1) Left column: geometry (spans all rows in the first column)
     # -------------------------------------------------------------------------
     ax_geometry = fig.add_subplot(gs[:, 0])
-    plot_geometry_on_ax(ax_geometry, x_positions, y_positions, sources)
+    plot_geometry_on_ax(ax_geometry, sim.x_mics, sim.y_mics, sim.sources)
 
     # -------------------------------------------------------------------------
     # 2) Right column, row 0: Composite waveforms
     #    Highlight Mic #1 in black, others in light gray
     # -------------------------------------------------------------------------
-    num_mics = composite_waveforms.shape[0]
+    num_mics = sim.composite_waveforms.shape[0]
 
     ax_composite = fig.add_subplot(gs[0, 1])
     # The rest in light gray
     for mic_idx in range(1, num_mics):
         ax_composite.plot(
-            t,
-            composite_waveforms[mic_idx],
+            sim.t,
+            sim.composite_waveforms[mic_idx],
             color="lightgray",
             # label=f"Mic {mic_idx}",
             # consider no label to avoid legend clutter
         )
 
     # First mic in black
-    ax_composite.plot(t, composite_waveforms[0], color="black", label="Mic 0")
+    ax_composite.plot(sim.t, sim.composite_waveforms[0], color="black", label="Mic 0")
     # Plot the measurement points
-    ax_composite.scatter(t, composite_waveforms[0], color="gold")
+    ax_composite.scatter(sim.t, sim.composite_waveforms[0], color="gold")
 
     ax_composite.set_title("Composite Waveforms (All Sources Summed)")
     ax_composite.set_xlabel("Time (s)")
@@ -478,7 +471,7 @@ def plot_overview(
     # Enumerate each source's waveform dictionary entry:
     #   "Source 1" -> waveforms_for_mics, etc.
     for i, (src_label, waveforms_for_mics) in enumerate(
-        individual_waveforms.items(), start=1
+        sim.individual_waveforms.items(), start=1
     ):
         ax_source = fig.add_subplot(gs[i, 1])
 
@@ -487,9 +480,11 @@ def plot_overview(
 
         # Other mics in gray
         for mic_idx in range(1, num_mics):
-            ax_source.plot(t, waveforms_for_mics[mic_idx], color="lightgray")
+            ax_source.plot(sim.t, waveforms_for_mics[mic_idx], color="lightgray")
         # Mic #0 in highlight color
-        ax_source.plot(t, waveforms_for_mics[0], color=highlight_color, label="Mic 0")
+        ax_source.plot(
+            sim.t, waveforms_for_mics[0], color=highlight_color, label="Mic 0"
+        )
 
         ax_source.set_title(f"Source {src_label} Waveforms")
         ax_source.set_xlabel("Time (s)")
