@@ -402,15 +402,6 @@ def experiment_7(plot=False):
         )
         plot_equation(Y[:, 1], C[:, :, 1], X[:, 1], ratios=(1, 8, 1), font_size=12)
 
-        # Validating mixing model
-        # plot_equation(
-        #     Y,
-        #     Y_pred,
-        #     np.array([[1]]),
-        #     titles=["Y_fft", "Y_pred=C*X", ""],
-        #     ratios=[1, 1, 0],
-        # )
-
         # Reconstructing X
         plot_equation(
             X_pred, X, np.array([[1]]), titles=("X_pred", "X", ""), ratios=(1, 1, 0)
