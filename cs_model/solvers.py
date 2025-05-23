@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.linear_model import Lasso, MultiTaskLasso
 from app import run_simulation
 from plotting import plot_geometry_auto, plot_overview, plot_equation, plot_matrix_3D
+from numpy.linalg import pinv
 
 
 def pred_lasso(sim, alpha=1, plot=False):
@@ -58,6 +59,7 @@ def diy_omp(A, y, max_iterations=100, tol=1e-3):
     for k in range(max_iterations):
         # OMP1
         correlations = A.T @ residual
+        correlations[support] = 0  # so they’ll never be max again
         j = np.argmax(np.abs(correlations))  # index that contributes the most
         support.append(j)
         # OMP2 recompute x entirely
@@ -73,7 +75,7 @@ def diy_omp(A, y, max_iterations=100, tol=1e-3):
     return x, support
 
 
-def multi_omp(sim):
+def multi_omp(sim):  # Can be modified to multi_function for any method
     X_omp = np.zeros((len(sim.sources), sim.N))
     for f in range(sim.N):  # for each frequency, N = len(freqs)
         X_omp[:, f] = diy_omp(sim.C[:, :, f], sim.Y[:, f])
@@ -81,16 +83,88 @@ def multi_omp(sim):
     return X_omp
 
 
+def s_largest_entries(z, s):
+    mod_z = z.copy()
+    indicies = np.zeros(s, dtype=int)
+    for i in range(s):
+        indicies[i] = np.argmax(abs(mod_z))
+        mod_z[indicies[i]] = 0
+    return indicies
+
+
+def s_approximation(z, s):
+    sparse_approx = np.zeros_like(z)
+    indicies = s_largest_entries(z, s)
+    sparse_approx[indicies] = z[indicies]
+    return sparse_approx
+
+
+def support(x):
+    return np.nonzero(x)[0]
+
+
+def CoSaMP(A, y, s, iterations=100):
+    m, N = A.shape
+    x_CoSaMP = np.zeros(N)
+    for i in range(iterations):
+        proxy = A.conj().T @ (y - A @ x_CoSaMP)  # conjugate transpose
+        L_2s = s_largest_entries(proxy, 2 * s)
+        support_x = support(x_CoSaMP)
+        U = np.union1d(support_x, L_2s)
+        u = np.zeros_like(x_CoSaMP)
+        z = pinv(A[:, U]) @ y  # the updated projection, no zeros.
+        u[U] = z  # equivalent to argmin ||y-Ax||_2 with support on U
+        x_CoSaMP = s_approximation(u, s)
+    return x_CoSaMP
+
+
+def test_sparse_recovery(method, N=8, s=3, m=8, sigma=0.01, seed=None, **method_kwargs):
+
+    if m is None:
+        m = 4 * s
+    if seed is not None:
+        np.random.seed(seed)
+
+    # Generate random measurement matrix and sparse signal
+    A = np.random.randn(m, N) + 1j * np.random.randn(m, N)
+    x_true = np.zeros(N, dtype=complex)
+    true_support = np.random.choice(N, s, replace=False)
+    x_true[true_support] = np.random.randn(s) + 1j * np.random.randn(s)
+
+    # Generate noisy measurements
+    noise = sigma * (np.random.randn(m) + 1j * np.random.randn(m))
+    y = A @ x_true + noise
+
+    # Recover signal
+    x_rec = method(A, y, s, **method_kwargs)
+
+    # Metrics
+    rel_error = np.linalg.norm(x_rec - x_true) / np.linalg.norm(x_true)
+    recovered_support = np.nonzero(x_rec)[0]
+
+    print(f"True support:      {sorted(true_support)}")
+    print(f"Recovered support: {sorted(recovered_support)}")
+    print(f"Relative error:    {rel_error:.2e}")
+    plot_equation(x_rec, x_true, A, ("x_rec", "x_true", "A"), ratios=(1, 1, 10))
+    plot_equation(
+        A @ x_true,
+        y,
+        x_rec - x_true,
+        titles=("No noise", "With noise", "x_rec - x_true"),
+        ratios=(1, 1, 1),
+    )
+
+    return rel_error, true_support, recovered_support
+
+
+def HTP(): ...
+
+
 if __name__ == "__main__":
     # sim = run_simulation(num_mics=3, no_sources=8, s_sparse=3)
     # X_lasso = pred_lasso(sim)
-    A = np.array([[1, 0, 4, 5], [0, 2, 0, 6], [1, 1, 1, 7], [1, 2, 3, 4]])
-    x = np.array([3, 5, 0, 0])
-    y = A @ x
-    print(y)
-    X_omp, _ = diy_omp(A, y)
-    print(X_omp)
-    print(_)
+
+    test_sparse_recovery(CoSaMP)
 
     # X_omp = X_omp.reshape(-1, 1)
     # plot_equation(
