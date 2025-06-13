@@ -165,12 +165,3 @@ if __name__ == "__main__":
     # X_lasso = pred_lasso(sim)
 
     test_sparse_recovery(CoSaMP)
-
-    # X_omp = X_omp.reshape(-1, 1)
-    # plot_equation(
-    #     sim.X,
-    #     X_lasso,
-    #     X_omp,
-    #     titles=("X", "X_lasso", "X_omp"),
-    #     ratios=(1, 1, 1),
-    # )
