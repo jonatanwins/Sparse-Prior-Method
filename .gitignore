@@ -163,3 +163,4 @@ cython_debug/
 
 .vimrc
 temp.py
+.DS_Store

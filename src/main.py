@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, fftshift, ifft, rfftfreq
 
-from cs_model.DFT import DFT, DFT_matrix
-from cs_model.plotting import (
+from src.DFT import DFT, DFT_matrix
+from src.plotting import (
     plot_C_pinv,
     plot_complex_matrix,
     plot_equation,
@@ -398,7 +398,29 @@ def experiment_7(plot=False):
 
     if plot:
         plot_overview(
-            x_mics, y_mics, sources, t, composite_waveforms, individual_waveforms
+            sim_result=SimpleNamespace(
+                t=t,
+                composite_waveforms=composite_waveforms,
+                individual_waveforms=individual_waveforms,
+                delays_dict=delays_dict,
+                x_time=x_time,
+                y_time=y_time,
+                X=X,
+                Y=Y_fft,
+                freqs=freqs,
+                C=C,
+                C_pinv=C_pinv,
+                Y_pred=Y_pred,
+                X_pred=X_pred,
+                x_pred=x_pred,
+                sources=sources,
+                x_mics=x_mics,
+                y_mics=y_mics,
+                sampling_rate=sampling_rate,
+                duration=simulation_duration,
+                N=N,
+                active_indices=active_indices,
+            )
         )
         plot_equation(Y[:, 1], C[:, :, 1], X[:, 1], ratios=(1, 8, 1), font_size=12)
 

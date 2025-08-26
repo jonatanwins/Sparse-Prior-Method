@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.linear_model import Lasso, MultiTaskLasso
-from app import run_simulation
+from src.main import run_simulation
 from plotting import plot_geometry_auto, plot_overview, plot_equation, plot_matrix_3D
 from numpy.linalg import pinv
 
