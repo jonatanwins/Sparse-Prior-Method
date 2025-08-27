@@ -2,14 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, ifft
 
-from src.main import (
+from cs_priors.main import (
     SoundSource,
     initialize_circular_array,
     initialize_linear_array,
     simulate_waveforms_multiple_sources,
 )
-from src.DFT import DFTfreq
-from src.plotting import (
+from cs_priors.simulation.dft import DFTfreq
+from cs_priors.plotting.plotting import (
     plot_C_pinv,
     plot_complex_matrix,
     plot_equation,

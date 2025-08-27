@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, fftshift, ifft, rfftfreq
 
-from src.DFT import DFT, DFT_matrix
-from src.plotting import (
+from cs_priors.simulation.dft import DFT, DFT_matrix
+from cs_priors.plotting.plotting import (
     plot_C_pinv,
     plot_complex_matrix,
     plot_equation,

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.plotting import plot_complex_matrix, plot_equation
+from cs_priors.plotting.plotting import plot_complex_matrix, plot_equation
 from scipy.fft import fft, fftfreq
 
 # ------------------------
