@@ -23,6 +23,10 @@ def linear_array(array_size, microphone_spacing):
 
 
 def circular_array(array_size, radius):
+
+    if array_size == 1:
+        return MicrophoneArray(x=np.array([0.0]), y=np.array([0.0]))
+
     angle_spacing = 2 * np.pi / array_size
 
     x_microphone_positions = np.array(

@@ -17,23 +17,6 @@ blue = "#3498DB"
 # ------------------------
 
 
-def plot_array_and_sources(x_positions, y_positions, sources):
-    """Plot the microphone array and the positions of all sound sources."""
-    plt.figure(figsize=(8, 8))
-    plt.scatter(x_positions, y_positions, label="Microphones", color=next(colors))
-    for idx, source in enumerate(sources):
-        source_x, source_y = source.get_position()
-        plt.scatter(source_x, source_y, label=f"Source {idx}", color=next(colors))
-    plt.scatter(0, 0, label="Origin", color=next(colors))
-    plt.xlabel("X Position (m)")
-    plt.ylabel("Y Position (m)")
-    plt.title("Microphone Array and Sound Sources")
-    plt.legend()
-    plt.grid(True)
-    plt.axis("equal")
-    plt.show()
-
-
 def plot_waveforms(t, composite_waveforms, delays_dict):
     """Plot the composite waveforms and delay information for each microphone."""
     num_mics = composite_waveforms.shape[0]

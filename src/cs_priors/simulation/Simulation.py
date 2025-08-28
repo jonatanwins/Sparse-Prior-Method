@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass
 
+
 @dataclass
 class Simulation:
     t: np.ndarray
@@ -19,6 +20,7 @@ class Simulation:
     x_pred: np.ndarray
     sources: list
     mics: list
+    walls: list
     sampling_rate: float
     duration: float
     N: int

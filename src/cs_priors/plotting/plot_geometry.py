@@ -45,10 +45,17 @@ def plot_mics(ax, mics, mic_color="crimson"):
         ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=9, color=mic_color)
 
 
+def plot_walls(ax, walls, wall_color="gray"):
+    """Plot the walls on the given Axes object."""
+    for wall in walls:
+        ax.plot([wall.p1[0], wall.p2[0]], [wall.p1[1], wall.p2[1]], color=wall_color)
+
+
 def plot_geometry_on_ax(
     ax,
     mics,
     sources,
+    walls=[],
     show_frequency=True,
     mic_color="crimson",
     source_color="dodgerblue",
@@ -59,6 +66,7 @@ def plot_geometry_on_ax(
 
     plot_mics(ax, mics, mic_color=mic_color)
     plot_sources(ax, sources, show_frequency=show_frequency, source_color=source_color)
+    plot_walls(ax, walls, wall_color="gray")
 
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
@@ -87,7 +95,7 @@ def plot_geometry_on_ax(
     max_span = max(x_span, y_span)
 
     # Pad by 30%
-    pad_factor = 0.3
+    pad_factor = 0.8
 
     lower_bound = min(x_min, y_min) - pad_factor * max_span
     upper_bound = max(x_max, y_max) + pad_factor * max_span
@@ -99,9 +107,18 @@ if __name__ == "__main__":
     import numpy as np
 
     from ..simulation.mixing_model import run_simulation
+    from ..geometry.walls import Wall
 
-    sim = run_simulation(no_sources=3, num_mics=5)
+    sim = run_simulation(no_sources=1, num_mics=1)
 
     fig, ax = plt.subplots()
-    plot_geometry_on_ax(ax, sim.mics, sim.sources)
+    plot_geometry_on_ax(
+        ax,
+        sim.mics,
+        sim.sources,
+        walls=[
+            Wall(p1=np.array([-0.3, -0.5]), p2=np.array([-0.3, 1.7])),
+            Wall(p1=np.array([-0.3, 1.7]), p2=np.array([1.5, 1.7])),
+        ],
+    )
     plt.show()

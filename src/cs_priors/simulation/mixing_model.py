@@ -93,6 +93,7 @@ def run_simulation(
     angle_base=np.pi / 4,
     sampling_rate_factor=10,
     simulation_duration=None,
+    walls=[]
 ):
 
     # 1. Initialize microphone array.
@@ -186,6 +187,7 @@ def run_simulation(
         x_pred=x_pred,
         sources=sources,
         mics=mics,
+        walls=walls,
         sampling_rate=SAMPLING_RATE,
         duration=simulation_duration,
         N=N,
