@@ -95,11 +95,58 @@ def plot_geometry_on_ax(
     max_span = max(x_span, y_span)
 
     # Pad by 30%
-    pad_factor = 0.8
+    pad_factor = 2
 
     lower_bound = min(x_min, y_min) - pad_factor * max_span
     upper_bound = max(x_max, y_max) + pad_factor * max_span
     ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
+
+
+def plot_reflected_sources(ax, walls, sources, color="orange"):
+    """Plot the reflected sources across the given walls."""
+
+    reflections = []
+    for source in sources:
+        for i in range(len(walls)):
+            reflected_source = walls[i].reflect_point(source.get_position())
+            reflections.append(reflected_source)
+            ax.scatter(
+                reflected_source[0],
+                reflected_source[1],
+                s=50,
+                marker="^",
+                edgecolor="k",
+                color=color,
+            )
+            for j in range(i + 1, len(walls)):
+                reflected_twice = walls[j].reflect_point(reflected_source)
+                reflections.append(reflected_twice)
+                ax.scatter(
+                    reflected_twice[0],
+                    reflected_twice[1],
+                    s=50,
+                    marker="^",
+                    edgecolor="k",
+                    color="green",
+                )
+    return reflections
+
+
+def plot_intersections(ax, walls, mics, reflections):
+    """Plot the intersections of the reflections with the walls."""
+    for wall in walls:
+        for ref in reflections:
+            for i in range(len(mics.x)):
+                intersection = wall.intersection((mics.x[i], mics.y[i]), ref)
+                if intersection is not None:
+                    ax.scatter(
+                        intersection[0],
+                        intersection[1],
+                        s=50,
+                        marker="x",
+                        edgecolor="k",
+                        color="purple",
+                    )
 
 
 if __name__ == "__main__":
@@ -109,16 +156,17 @@ if __name__ == "__main__":
     from ..simulation.mixing_model import run_simulation
     from ..geometry.walls import Wall
 
-    sim = run_simulation(no_sources=1, num_mics=1)
-
-    fig, ax = plt.subplots()
-    plot_geometry_on_ax(
-        ax,
-        sim.mics,
-        sim.sources,
+    sim = run_simulation(
+        no_sources=1,
+        num_mics=1,
         walls=[
             Wall(p1=np.array([-0.3, -0.5]), p2=np.array([-0.3, 1.7])),
             Wall(p1=np.array([-0.3, 1.7]), p2=np.array([1.5, 1.7])),
         ],
     )
+
+    fig, ax = plt.subplots()
+    plot_geometry_on_ax(ax, sim.mics, sim.sources, walls=sim.walls)
+    reflections = plot_reflected_sources(ax, sim.walls, sim.sources)
+    plot_intersections(ax, sim.walls, sim.mics, reflections)
     plt.show()
