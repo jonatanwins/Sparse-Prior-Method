@@ -412,7 +412,7 @@ def plot_overview(sim):
     # 1) Left column: geometry (spans all rows in the first column)
     # -------------------------------------------------------------------------
     ax_geometry = fig.add_subplot(gs[:, 0])
-    plot_geometry_on_ax(ax_geometry, sim.x_mics, sim.y_mics, sim.sources)
+    plot_geometry_on_ax(ax_geometry, sim.mics[0, :], sim.mics[0, :], sim.sources)
 
     # -------------------------------------------------------------------------
     # 2) Right column, row 0: Composite waveforms

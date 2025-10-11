@@ -31,8 +31,8 @@ def plot_sources(ax, sources, show_frequency=True, source_color="dodgerblue"):
 def plot_mics(ax, mics, mic_color="crimson"):
     # Plot microphones
     ax.scatter(
-        mics.x,
-        mics.y,
+        mics[:, 0],
+        mics[:, 1],
         s=30,
         marker="o",
         color=mic_color,
@@ -41,7 +41,7 @@ def plot_mics(ax, mics, mic_color="crimson"):
     )
 
     # Annotate each microphone with its microphone number (starting from 0)
-    for idx, (x, y) in enumerate(zip(mics.x, mics.y)):
+    for idx, (x, y) in enumerate(zip(mics[:, 0], mics[:, 1])):
         ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=9, color=mic_color)
 
 
@@ -80,10 +80,10 @@ def plot_geometry_on_ax(
     # ----------------------------
     # Collect all x, all y: mics, sources, origin
     mic_and_src_x = np.concatenate(
-        [mics.x, np.array([src.get_position()[0] for src in sources]), [0.0]]
+        [mics[:, 0], np.array([src.get_position()[0] for src in sources]), [0.0]]
     )
     mic_and_src_y = np.concatenate(
-        [mics.y, np.array([src.get_position()[1] for src in sources]), [0.0]]
+        [mics[:, 1], np.array([src.get_position()[1] for src in sources]), [0.0]]
     )
 
     x_min, x_max = mic_and_src_x.min(), mic_and_src_x.max()
@@ -105,48 +105,32 @@ def plot_geometry_on_ax(
 def plot_reflected_sources(ax, walls, sources, color="orange"):
     """Plot the reflected sources across the given walls."""
 
-    reflections = []
-    for source in sources:
-        for i in range(len(walls)):
-            reflected_source = walls[i].reflect_point(source.get_position())
-            reflections.append(reflected_source)
-            ax.scatter(
-                reflected_source[0],
-                reflected_source[1],
-                s=50,
-                marker="^",
-                edgecolor="k",
-                color=color,
-            )
-            for j in range(i + 1, len(walls)):
-                reflected_twice = walls[j].reflect_point(reflected_source)
-                reflections.append(reflected_twice)
-                ax.scatter(
-                    reflected_twice[0],
-                    reflected_twice[1],
-                    s=50,
-                    marker="^",
-                    edgecolor="k",
-                    color="green",
-                )
+    reflections = compute_reflections(sources, walls)
+    for reflection in reflections:
+        ax.scatter(
+            reflection.pos[0],
+            reflection.pos[1],
+            s=50,
+            marker="^",
+            edgecolor="k",
+            color=color,
+        )
     return reflections
 
 
 def plot_intersections(ax, walls, mics, reflections):
     """Plot the intersections of the reflections with the walls."""
-    for wall in walls:
-        for ref in reflections:
-            for i in range(len(mics.x)):
-                intersection = wall.intersection((mics.x[i], mics.y[i]), ref)
-                if intersection is not None:
-                    ax.scatter(
-                        intersection[0],
-                        intersection[1],
-                        s=50,
-                        marker="x",
-                        edgecolor="k",
-                        color="purple",
-                    )
+    for mic in mics:
+        paths = compute_path(reflections, mic)
+        for path in paths:
+            for intersection in path.intersection_seq:
+                ax.scatter(
+                    intersection[0],
+                    intersection[1],
+                    s=50,
+                    marker="x",
+                    color="purple",
+                )
 
 
 if __name__ == "__main__":
@@ -154,19 +138,21 @@ if __name__ == "__main__":
     import numpy as np
 
     from ..simulation.mixing_model import run_simulation
-    from ..geometry.walls import Wall
+    from ..geometry.walls import Wall, compute_reflections, compute_path
 
     sim = run_simulation(
-        no_sources=1,
+        num_sources=1,
         num_mics=1,
         walls=[
             Wall(p1=np.array([-0.3, -0.5]), p2=np.array([-0.3, 1.7])),
             Wall(p1=np.array([-0.3, 1.7]), p2=np.array([1.5, 1.7])),
         ],
+        array_type="circular",
     )
 
     fig, ax = plt.subplots()
     plot_geometry_on_ax(ax, sim.mics, sim.sources, walls=sim.walls)
     reflections = plot_reflected_sources(ax, sim.walls, sim.sources)
+    print(reflections)
     plot_intersections(ax, sim.walls, sim.mics, reflections)
     plt.show()

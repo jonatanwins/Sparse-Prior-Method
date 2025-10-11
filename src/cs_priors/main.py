@@ -18,6 +18,8 @@ from cs_priors.plotting.plotting import (
     plot_Y_comparison,
 )
 
+# I believe this is completely moved now and can safely be deleted 11. oct 2025
+
 # Constants
 speed_of_sound = 343  # m/s
 

@@ -1,5 +1,5 @@
 import numpy as np
-from random import random
+import random
 from scipy.fft import fft, ifft, fftfreq
 from ..geometry.arrays import circular_array, linear_array
 from ..geometry.sources import SoundSource
@@ -9,7 +9,7 @@ from .Simulation import Simulation
 
 def calculate_delays(mics, source: SoundSource):
     source_x, source_y = source.get_position()
-    distances = np.sqrt((mics.x - source_x) ** 2 + (mics.y - source_y) ** 2)
+    distances = np.sqrt((mics[:, 0] - source_x) ** 2 + (mics[:, 1] - source_y) ** 2)
     delays = distances / SPEED_OF_SOUND
     return delays
 
@@ -48,7 +48,7 @@ def waveforms_at_mics(mics, sources, sampling_rate, duration=None):
         duration = 1 / min_freq
 
     t = np.linspace(0, duration, int(sampling_rate * duration), endpoint=False)
-    composite_waveforms = np.zeros((len(mics.x), len(t)))
+    composite_waveforms = np.zeros((len(mics), len(t)))
     individual_waveforms = {}
     delays_dict = {}
 
@@ -84,7 +84,7 @@ def run_simulation(
     array_type="circular",
     num_mics=5,
     spacing=0.1,
-    no_sources=1,
+    num_sources=1,
     s_sparse=None,
     f0=100,
     distance=1.5,
@@ -93,7 +93,7 @@ def run_simulation(
     angle_base=np.pi / 4,
     sampling_rate_factor=10,
     simulation_duration=None,
-    walls=[]
+    walls=[],
 ):
 
     # 1. Initialize microphone array.
@@ -114,12 +114,12 @@ def run_simulation(
             phase=phase_step * a,
             function=np.sin,
         )
-        for a in range(no_sources)
+        for a in range(num_sources)
     ]
-    if s_sparse is not None and s_sparse < no_sources:
+    if s_sparse is not None and s_sparse < num_sources:
         sources, active_indices = s_sparse_sources(s_sparse, sources)
     else:
-        active_indices = list(range(no_sources))
+        active_indices = list(range(num_sources))
 
     # 3. Define sampling parameters.
     SAMPLING_RATE = sampling_rate_factor * f0
@@ -162,6 +162,7 @@ def run_simulation(
     X_pred = np.zeros((num_sources, N), dtype=complex)
     C_pinv = np.zeros((num_sources, num_mics, N), dtype=complex)
     for idf in range(N):
+        # TODO Change this to C[f] = matrix for that frequency, i.e. block matrices
         C_f = C[:, :, idf]
         C_f_pinv = np.linalg.pinv(C_f)
         C_pinv[:, :, idf] = C_f_pinv
