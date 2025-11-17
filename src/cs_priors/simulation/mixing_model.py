@@ -89,8 +89,10 @@ def run_simulation(
     f0=100,
     distance=1.5,
     amplitude=2,
+    amplitude_step=0,
     phase_step=0.3,
     angle_base=np.pi / 4,
+    angle_step=0.3,
     sampling_rate_factor=10,
     simulation_duration=None,
     walls=[],
@@ -108,7 +110,7 @@ def run_simulation(
     sources = [
         SoundSource(
             distance=distance,
-            angle=angle_base + phase_step * a,
+            angle=angle_base + angle_step * a,
             frequency=f0,
             amplitude=amplitude,
             phase=phase_step * a,

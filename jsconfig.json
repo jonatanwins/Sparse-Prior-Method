@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "cs_priors/*": ["src/cs_priors/*"]
+    }
+  },
+  "include": ["src"]
+}

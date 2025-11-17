@@ -103,6 +103,7 @@ def plot_geometry_on_ax(
     show_frequency=True,
     mic_color="crimson",
     source_color="dodgerblue",
+    pad_factor=0.3,
 ):
     """
     Plot microphones, sources, and origin on the given Axes object.
@@ -177,21 +178,34 @@ def plot_geometry_on_ax(
     y_span = y_max - y_min
     max_span = max(x_span, y_span)
 
-    # Pad by 30%
-    pad_factor = 0.3
-
+    # Here we use the specified pad_factor to add padding around the plot
     lower_bound = min(x_min, y_min) - pad_factor * max_span
     upper_bound = max(x_max, y_max) + pad_factor * max_span
     ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
 
 
 def plot_geometry_auto(
-    x_positions, y_positions, sources, show_frequency=True, figsize=(8, 8)
+    x_positions,
+    y_positions,
+    sources,
+    show_frequency=True,
+    figsize=(8, 8),
+    fontsize=16,
+    pad_factor=0.4,
 ):
 
     fig, ax = plt.subplots(figsize=figsize)
     # Call your existing plot_geometry function
-    plot_geometry_on_ax(ax, x_positions, y_positions, sources, show_frequency)
+    plot_geometry_on_ax(
+        ax, x_positions, y_positions, sources, show_frequency, pad_factor=pad_factor
+    )
+    plt.axis("equal")
+    plt.setp(ax.get_xticklabels(), fontsize=fontsize)
+    plt.setp(ax.get_yticklabels(), fontsize=fontsize)
+    plt.legend(fontsize=fontsize)
+    plt.title("Microphone Array & Sound Sources", fontsize=fontsize + 2)
+    plt.xlabel("X Position (m)", fontsize=fontsize)
+    plt.ylabel("Y Position (m)", fontsize=fontsize)
     plt.show()
 
 
@@ -327,7 +341,7 @@ def plot_waveform_column_auto(
           Dictionary with keys representing source labels and values being 2D arrays (one per source)
           of shape (num_mics, len(t)) that contain the waveform data from each microphone.
     """
-    # Determine the number of sources and number of rows (1 composite + one per source)
+    # Determine the number of sources and number of rows (1 composite + 1 per source)
     n_sources = len(individual_waveforms)
     total_rows = n_sources + 1
 
@@ -412,7 +426,16 @@ def plot_overview(sim):
     # 1) Left column: geometry (spans all rows in the first column)
     # -------------------------------------------------------------------------
     ax_geometry = fig.add_subplot(gs[:, 0])
-    plot_geometry_on_ax(ax_geometry, sim.mics[0, :], sim.mics[0, :], sim.sources)
+    # print the mics and their shape
+    print(
+        sim.mics,
+        sim.mics.shape,
+        sim.mics[0, :],
+        sim.mics[1, :],
+        sim.mics[:, 0],
+        sim.mics[:, 1],
+    )
+    plot_geometry_on_ax(ax_geometry, sim.mics[:, 0], sim.mics[:, 1], sim.sources)
 
     # -------------------------------------------------------------------------
     # 2) Right column, row 0: Composite waveforms
@@ -589,7 +612,7 @@ def complex_to_rgb(matrix):
     Convert a complex matrix to an RGB image using an HSV mapping:
       - Hue: phase (normalized from -pi to pi → 0 to 1)
       - Saturation: fixed at 1.
-      - Value: magnitude (normalized to 0-1).
+      - Value: magnitude (normalized to 0-1), but set to 0 (black) for small magnitudes regardless of angle.
     """
     # Ensure matrix is two-dimensional.
     mat = np.atleast_2d(matrix)
@@ -609,6 +632,12 @@ def complex_to_rgb(matrix):
     hsv[..., 0] = norm_phase  # Hue from phase.
     hsv[..., 1] = 1  # Full saturation.
     hsv[..., 2] = norm_mag  # Value from normalized magnitude.
+
+    # Set values with small magnitude to black (Value = 0) regardless of angle.
+    # Use a threshold of 0.0001 for magnitude, matching the display logic elsewhere.
+    threshold = 0.0001
+    small_mask = magnitude < threshold
+    hsv[small_mask, 2] = 0  # Set Value to 0 for small magnitudes.
 
     # Convert HSV to RGB.
     rgb = hsv_to_rgb(hsv)
@@ -637,13 +666,15 @@ def plot_complex_matrix_on_ax(
     rgb = complex_to_rgb(matrix)
     ax.imshow(rgb, interpolation="none", aspect="auto")
     ax.set_title(title)
+    # set the title size
+    ax.title.set_fontsize(font_size + 20)
     ax.axis("off")
 
     if show_values:
         n, m = matrix.shape
         for i in range(n):
             for j in range(m):
-                if abs(matrix[i, j]) < 0.1:
+                if abs(matrix[i, j]) < 0.01:
                     value_str = "0"
                 elif polar:
                     # Compute magnitude and phase (in degrees)
@@ -652,7 +683,12 @@ def plot_complex_matrix_on_ax(
                         value_str = f"{r:.1f}"
                     else:
                         theta = np.angle(matrix[i, j], deg=True)
-                        value_str = f"{r:.1f}∠{theta:.0f}°"
+                        if theta == 180:
+                            value_str = f"{-r:.1f}"
+                        elif theta == 0:
+                            value_str = f"{r:.1f}"
+                        else:
+                            value_str = f"{r:.1f}∠{theta:.0f}°"
                 else:
                     value_str = f"{matrix[i, j].real:.1f}{matrix[i, j].imag:+.1f}j"
                 ax.text(
@@ -747,6 +783,110 @@ def plot_equation(
         fig.text(mult_x, eq_y, "×", fontsize=30, ha="center", va="center")
 
         fig.suptitle(f"Equation: {titles[0]} = {titles[1]}{titles[2]}", fontsize=32)
+    plt.show()
+
+
+def plot_two_line_equation(
+    Y1,
+    C1,
+    X1,
+    titles1=("Y1", "C1", "X1"),
+    Y2=None,
+    C2=None,
+    X2=None,
+    titles2=("Y2", "C2", "X2"),
+    show_values=True,
+    polar=True,
+    ratios=[1, 1, 1],
+    symbols=False,
+    font_size=8,
+):
+    """
+    Plot two equations of three matrices each, one above the other.
+
+    Each equation is plotted as Y = C × X, with matrices side by side.
+    """
+    fig, axs = plt.subplots(
+        2,
+        3,
+        figsize=(15, 10),
+        gridspec_kw={"width_ratios": ratios, "wspace": 0.1, "hspace": 0.2},
+    )
+
+    # First equation (top row)
+    plot_complex_matrix_on_ax(
+        axs[0, 0],
+        Y1,
+        title=titles1[0],
+        show_values=show_values,
+        polar=polar,
+        font_size=font_size,
+    )
+    plot_complex_matrix_on_ax(
+        axs[0, 1],
+        C1,
+        title=titles1[1],
+        show_values=show_values,
+        polar=polar,
+        font_size=font_size,
+    )
+    plot_complex_matrix_on_ax(
+        axs[0, 2],
+        X1,
+        title=titles1[2],
+        show_values=show_values,
+        polar=polar,
+        font_size=font_size,
+    )
+
+    # Second equation (bottom row), if provided
+    if Y2 is not None and C2 is not None and X2 is not None:
+        plot_complex_matrix_on_ax(
+            axs[1, 0],
+            Y2,
+            title=titles2[0],
+            show_values=show_values,
+            polar=polar,
+            font_size=font_size,
+        )
+        plot_complex_matrix_on_ax(
+            axs[1, 1],
+            C2,
+            title=titles2[1],
+            show_values=show_values,
+            polar=polar,
+            font_size=font_size,
+        )
+        plot_complex_matrix_on_ax(
+            axs[1, 2],
+            X2,
+            title=titles2[2],
+            show_values=show_values,
+            polar=polar,
+            font_size=font_size,
+        )
+    else:
+        # If not provided, perhaps hide or leave blank
+        for j in range(3):
+            axs[1, j].axis('off')
+
+    if symbols:
+        # For first row
+        pos0 = axs[0, 0].get_position()
+        pos1 = axs[0, 1].get_position()
+        pos2 = axs[0, 2].get_position()
+        eq_x = (pos0.x1 + pos1.x0) / 2.0
+        mult_x = (pos1.x1 + pos2.x0) / 2.0
+        eq_y1 = (pos1.y0 + pos1.y1) / 2.0
+        fig.text(eq_x, eq_y1, "=", fontsize=30, ha="center", va="center")
+        fig.text(mult_x, eq_y1, "×", fontsize=30, ha="center", va="center")
+
+        # For second row, if applicable
+        if Y2 is not None:
+            eq_y2 = (axs[1, 1].get_position().y0 + axs[1, 1].get_position().y1) / 2.0
+            fig.text(eq_x, eq_y2, "=", fontsize=30, ha="center", va="center")
+            fig.text(mult_x, eq_y2, "×", fontsize=30, ha="center", va="center")
+
     plt.show()
 
 
@@ -907,5 +1047,12 @@ def plot_matrix_3D(C):
     plt.show()
 
 
-def wrapper_plot_geometry(sim, figsize=(8, 8)):
-    plot_geometry_auto(sim.x_mics, sim.y_mics, sim.sources, figsize=figsize)
+def wrapper_plot_geometry(sim, figsize=(8, 8), fontsize=16, pad_factor=0.4):
+    plot_geometry_auto(
+        sim.mics[:, 0],
+        sim.mics[:, 1],
+        sim.sources,
+        figsize=figsize,
+        fontsize=fontsize,
+        pad_factor=pad_factor,
+    )
