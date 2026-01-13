@@ -104,6 +104,7 @@ def plot_geometry_on_ax(
     mic_color="crimson",
     source_color="dodgerblue",
     pad_factor=0.3,
+    skip_labels=False,
 ):
     """
     Plot microphones, sources, and origin on the given Axes object.
@@ -121,8 +122,11 @@ def plot_geometry_on_ax(
     )
 
     # Annotate each microphone with its microphone number (starting from 0)
-    for idx, (x, y) in enumerate(zip(x_positions, y_positions)):
-        ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=9, color=mic_color)
+    if not skip_labels:
+        for idx, (x, y) in enumerate(zip(x_positions, y_positions)):
+            ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=9, color=mic_color)
+    else:
+        show_frequency = False  # if skipping labels, also skip frequency annotations
 
     # Plot each source
     for idx, src in enumerate(sources):
@@ -192,12 +196,19 @@ def plot_geometry_auto(
     figsize=(8, 8),
     fontsize=16,
     pad_factor=0.4,
+    skip_labels=False,
 ):
 
     fig, ax = plt.subplots(figsize=figsize)
     # Call your existing plot_geometry function
     plot_geometry_on_ax(
-        ax, x_positions, y_positions, sources, show_frequency, pad_factor=pad_factor
+        ax,
+        x_positions,
+        y_positions,
+        sources,
+        show_frequency,
+        pad_factor=pad_factor,
+        skip_labels=skip_labels,
     )
     plt.axis("equal")
     plt.setp(ax.get_xticklabels(), fontsize=fontsize)
@@ -426,15 +437,6 @@ def plot_overview(sim):
     # 1) Left column: geometry (spans all rows in the first column)
     # -------------------------------------------------------------------------
     ax_geometry = fig.add_subplot(gs[:, 0])
-    # print the mics and their shape
-    print(
-        sim.mics,
-        sim.mics.shape,
-        sim.mics[0, :],
-        sim.mics[1, :],
-        sim.mics[:, 0],
-        sim.mics[:, 1],
-    )
     plot_geometry_on_ax(ax_geometry, sim.mics[:, 0], sim.mics[:, 1], sim.sources)
 
     # -------------------------------------------------------------------------
@@ -1047,7 +1049,9 @@ def plot_matrix_3D(C):
     plt.show()
 
 
-def wrapper_plot_geometry(sim, figsize=(8, 8), fontsize=16, pad_factor=0.4):
+def wrapper_plot_geometry(
+    sim, figsize=(8, 8), fontsize=16, pad_factor=0.4, skip_labels=False
+):
     plot_geometry_auto(
         sim.mics[:, 0],
         sim.mics[:, 1],
@@ -1055,4 +1059,5 @@ def wrapper_plot_geometry(sim, figsize=(8, 8), fontsize=16, pad_factor=0.4):
         figsize=figsize,
         fontsize=fontsize,
         pad_factor=pad_factor,
+        skip_labels=skip_labels,
     )

@@ -44,7 +44,6 @@ def simulate_mixing_model(
     # optimize the objective
     X0_real = to_real_augmented(X0)
     B_real = np.block([[B.real, -B.imag], [B.imag, B.real]])
-    # global D
     D = covariance_matrices(num_sources=X0_real.shape[0])
     z_opt, x_opt, x_opt_complex, res = optimize_objective(X0_real, B_real, D)
     plot_initial_vs_optimized(z_opt, x_opt, x_opt_complex, res, X_true, X0, X0_real)
@@ -53,12 +52,6 @@ def simulate_mixing_model(
 # Convert to complex vectors and matrices to augmented real form for optimization
 def to_real_augmented(x_complex: np.ndarray) -> np.ndarray:
     x_real = np.array([x_complex.real, x_complex.imag]).reshape(-1, 1)
-    # plotting.plot_equation(
-    #     x_complex,
-    #     x_real,
-    #     np.array([x_complex.real, x_complex.imag]).reshape(-1, 1),
-    #     ("x_complex", "x_real", "x_separated"),
-    # )
     return x_real
 
 
@@ -248,7 +241,6 @@ def test_source_separation():
 
 
 def compare_to_LASSO():
-    from sklearn.linear_model import Lasso
 
     num_sources = 10
     num_mics = 8
@@ -316,7 +308,7 @@ def compare_real_value_LASSO():
     s_sparse = 2
 
     # set the random seed for reproducibility
-    np.random.seed(42)
+    np.random.seed(2025)
     X_true = np.random.randn(num_sources) * 10
     # choose sparse indicies
     zero_indices = np.random.choice(num_sources, num_sources - s_sparse, replace=False)
@@ -463,8 +455,6 @@ def plot_error_heatmap_LASSO():
 
 # same as plot_heatmap_LASSO but only the error difference and for simulated data
 def plot_error_difference_heatmap_LASSO_simulated():
-    import seaborn as sns
-    from sklearn.linear_model import Lasso
 
     num_sources = 10
     mic_numbers = list(range(1, 11))
@@ -791,28 +781,29 @@ def tensor_lasso_runs(num_mics=[8], num_sources=[10], sparsities=[2], alphas=[0.
                     freq_index = 1
                     Y = sim.Y[:, freq_index]  # Measurements
                     A = sim.C[:, :, freq_index]  # Mixing matrix
-                    X_true = sim.X[:, freq_index]
+                    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
 
                     # LASSO regression
                     A_real = np.block([[A.real, -A.imag], [A.imag, A.real]])
                     Y_real = to_real_augmented(Y)  # Flatten to 1D for sklearn
 
-                    lasso = Lasso(alpha=alpha)
+                    lasso = Lasso(alpha=alpha, warm_start=True, fit_intercept=False)
+                    lasso.coef_ = to_real_augmented(X0).flatten()  # initialize with X0
+
                     lasso.fit(A_real, Y_real)  # coordinate descent
 
                     X_lasso_real = lasso.coef_.reshape(-1, 1)
                     X_lasso = from_real_augmented(X_lasso_real)
-                    dist_lasso = np.linalg.norm(
-                        X_lasso.reshape(-1, 1) - X_true.reshape(-1, 1)
-                    )
 
-                    results[(n_src, n_mic, s_sparse, alpha)] = dist_lasso
+                    results[(n_src, n_mic, s_sparse, alpha)] = X_lasso
+
     return results
 
 
 def tensor_sparse_prior_runs(num_mics=[8], sparsities=[2], num_sources=[10]):
-
+    results_X0 = {}
     results = {}
+    results_X_true = {}
     for n_src in num_sources:
         for n_mic in num_mics:
             for s_sparse in sparsities:
@@ -830,23 +821,162 @@ def tensor_sparse_prior_runs(num_mics=[8], sparsities=[2], num_sources=[10]):
                 # sparse prior optimization
                 X0 = np.linalg.pinv(A) @ Y  # initial guess for X
                 x_opt, B = sparse_prior_solution(X0, A)
-                dist_opt = np.linalg.norm(x_opt.reshape(-1, 1) - X_true.reshape(-1, 1))
 
-                results[(n_src, n_mic, s_sparse)] = dist_opt
-    return results
+                results[(n_src, n_mic, s_sparse)] = x_opt
+                results_X0[(n_src, n_mic, s_sparse)] = X0
+                results_X_true[(n_src, n_mic, s_sparse)] = X_true
+    return results, results_X0, results_X_true
 
 
-def test():
-    alphas = [0.01, 0.1, 1.0]
+def compare_lasso_sparse_prior_vary_alpha():
+    num_mics = [8]
+    num_sources = [10]
+    alphas = [0.1, 0.05, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0]
+    sparsities = [2, 3, 4, 5, 6, 7, 8]
 
-    results = tensor_lasso_runs(
+    results_lasso = tensor_lasso_runs(
+        num_mics=num_mics,
+        num_sources=num_sources,
+        sparsities=sparsities,
         alphas=alphas,
-        num_mics=[5, 10],
-        sparsities=[2, 5],
-        num_sources=[10, 20],
     )
+    results_sparse_prior, results_X0, results_X_true = tensor_sparse_prior_runs(
+        num_mics=num_mics,
+        sparsities=sparsities,
+        num_sources=num_sources,
+    )
+
+    # plot thee true, x0, sparse prior and lasso for alpha 0.0, 0.0001, 0.1 for 8 mics, 10 sources, sparsity 4
+    n_src = 10
+    n_mic = 8
+    s_sparse = 2
+
+    X_true = results_X_true[(n_src, n_mic, s_sparse)]
+    X0 = results_X0[(n_src, n_mic, s_sparse)]
+    X_sparse_prior = results_sparse_prior[(n_src, n_mic, s_sparse)]
+    X_lasso_0 = results_lasso[(n_src, n_mic, s_sparse, 0.0)]
+    X_lasso_01 = results_lasso[(n_src, n_mic, s_sparse, 0.1)]
+    X_lasso_0001 = results_lasso[(n_src, n_mic, s_sparse, 0.001)]
+    plotting.plot_two_line_equation(
+        to_real_augmented(X_true),
+        to_real_augmented(X0),
+        to_real_augmented(X_sparse_prior),
+        (r"$X_{true}$", r"$X_0$", r"$X_{sparse\ prior}$"),
+        to_real_augmented(X_lasso_0),
+        to_real_augmented(X_lasso_01),
+        to_real_augmented(X_lasso_0001),
+        (
+            r"$X_{LASSO\ \alpha=0.0}$",
+            r"$X_{LASSO\ \alpha=0.1}$",
+            r"$X_{LASSO\ \alpha=0.001}$",
+        ),
+        font_size=8,
+    )
+
+    # plot 2d plot of sparse prior and all alphas for 8 mics, 10 sources, varying the sparsity
+    sparse_prior_errors = []
+    X0_errors = []
+    lasso_errors = {alpha: [] for alpha in alphas}
+    for s_sparse in sparsities:
+        error = np.linalg.norm(
+            results_sparse_prior[(10, 8, s_sparse)].reshape(-1, 1)
+            - results_X_true[(10, 8, s_sparse)].reshape(-1, 1)
+        )
+        sparse_prior_errors.append(error)
+        error = np.linalg.norm(
+            results_X0[(10, 8, s_sparse)].reshape(-1, 1)
+            - results_X_true[(10, 8, s_sparse)].reshape(-1, 1)
+        )
+        X0_errors.append(error)
+        for alpha in alphas:
+            error = np.linalg.norm(
+                results_lasso[(10, 8, s_sparse, alpha)].reshape(-1, 1)
+                - results_X_true[(10, 8, s_sparse)].reshape(-1, 1)
+            )
+            lasso_errors[alpha].append(error)
+    plt.figure()
+    plt.plot(sparsities, sparse_prior_errors, marker='o', label='Sparse Prior')
+    plt.plot(sparsities, X0_errors, marker='s', label='Pseudoinverse X0')
     for alpha in alphas:
-        print(f"{results[(10, 10, 2, alpha)]}")
+        plt.plot(
+            sparsities,
+            lasso_errors[alpha],
+            marker='x',
+            label=f'LASSO alpha={alpha}',
+        )
+    plt.xlabel('Sparsity Level (s_sparse)')
+    plt.ylabel(r'Error $\|X_{est} - X_{true}\|$')
+    plt.title(
+        r'Source Reconstruction Error vs Sparsity Level' + f' (10 sources, 8 mics)'
+    )
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+
+def group_lasso():
+    """
+    Groups the real and imaginary parts of each source together in the LASSO regression.
+    The real form is of [Re Im].T Hence the groups are (X[i], X[i+num_sources]) for i in range(num_sources)
+    """
+    from group_lasso import GroupLasso
+
+    num_sources = 10
+    num_mics = 8
+    s_sparse = 2
+    angle_step = np.pi / 180 * 10
+    sim = run_simulation(
+        num_sources=num_sources,
+        num_mics=num_mics,
+        s_sparse=s_sparse,
+        angle_step=angle_step,
+    )
+    freq_index = 1
+    Y = sim.Y[:, freq_index]  # Measurements
+    A = sim.C[:, :, freq_index]  # Mixing matrix
+    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
+    X_true = sim.X[:, freq_index]
+
+    # Group LASSO regression
+    A_real = np.block([[A.real, -A.imag], [A.imag, A.real]])
+    Y_real = to_real_augmented(Y)
+
+    # Define groups for real and imaginary parts
+    groups = []
+    for i in range(num_sources):
+        groups.append([i, i + num_sources])  # real part and imaginary part
+
+    group_lasso = GroupLasso(
+        groups=groups,
+        group_reg=0.1,
+        l1_reg=0.0,
+        frobenius_lipschitz=True,
+        scale_reg="group_size",
+        subsampling_scheme=None,
+        fit_intercept=False,
+        # max_iter=1000,
+        tol=1e-3,
+        warm_start=True,
+        random_state=2025,
+    )
+    group_lasso.fit(A_real, Y_real)  # coordinate descent
+    X_glasso_real = group_lasso.coef_.reshape(-1, 1)
+    X_glasso = from_real_augmented(X_glasso_real)
+    dist_glasso = np.linalg.norm(X_glasso - X_true)
+    dist_pinv = np.linalg.norm(X0 - X_true)
+    print(f"Pseudoinverse distance: {dist_pinv:.4f}")
+    print(f"Group LASSO distance: {dist_glasso:.4f}")
+    plotting.plot_two_line_equation(
+        X_true,
+        X0,
+        X_glasso,
+        (r"$X_{True}$", r"$X_{0}$", r"$X_{Group\ LASSO}$"),
+        to_real_augmented(X_true),
+        to_real_augmented(X0),
+        X_glasso_real,
+        (r"$X_{true}^{real}$", r"$X_{0}^{real}$", r"$X_{Group\ LASSO}^{real}$"),
+        font_size=16,
+    )
 
 
 if __name__ == "__main__":
@@ -855,4 +985,5 @@ if __name__ == "__main__":
     # compare_real_value_LASSO()
     # plot_error_heatmap_LASSO()
     # plot_error_difference_heatmap_LASSO_simulated()
-    test()
+    # compare_lasso_sparse_prior_vary_alpha()
+    group_lasso()
