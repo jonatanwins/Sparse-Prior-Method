@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from pyparsing import alphas
+import time
 import scipy.optimize as optimize
 import seaborn as sns
 from sklearn.linear_model import Lasso
@@ -14,6 +14,7 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 from cs_priors.simulation.mixing_model import run_simulation
 from cs_priors.plotting.plotting import (
@@ -61,7 +62,7 @@ def initialize_underdetermined_system(
     return X_true, A, Y
 
 
-def just_YAX_from_simulation(
+def just_YAX_from_simulation( # moved to mixing_model.py
     num_mics=3,
     num_sources=5,
     s_sparse=2,
@@ -110,10 +111,10 @@ def complex_lasso(A, Y, alpha=0.1):
     return X_complex
 
 
-def noise_threshold(Y, A, tolerance_factor=0.1):
-    X0 = np.linalg.pinv(A) @ Y
-    max = X0.max()
-    threshold = np.abs(tolerance_factor * max)
+def noise_threshold(X0, tolerance_factor=0.1):
+    # X0 is complex valued, we need to set the threshold based on its maximum value in absolute terms
+    max_absolute = np.abs(X0).max()
+    threshold = np.abs(tolerance_factor * max_absolute)
     return threshold
 
 
@@ -129,9 +130,11 @@ def nonzero_difference(X1, X2, tol):
 
 
 def run_comparison_sparsity(
-    mic_range=[], source_range=[], sparsity_range=[], alpha=1e-3
+    mic_range=[], source_range=[], sparsity_range=[], seed=1, alpha=1e-3
 ):
-    results = []
+    np.random.seed(seed)
+    results = {}
+
     for num_mics in mic_range:
         for num_sources in source_range:
             for s_sparse in sparsity_range:
@@ -147,30 +150,38 @@ def run_comparison_sparsity(
                 X_sp, B = sparse_prior_solution(X0, A)
                 X_lasso = complex_lasso(A, Y, alpha=alpha)
 
-                threshold = noise_threshold(Y, A)
+                threshold = noise_threshold(X0)
 
                 error_sp = nonzero_difference(X_TRUE, X_sp, tol=threshold)
                 error_lasso = nonzero_difference(X_TRUE, X_lasso, tol=threshold)
 
-                results.append(
-                    {
-                        "num_mics": num_mics,
-                        "num_sources": num_sources,
-                        "s_sparse": s_sparse,
-                        "X_TRUE": X_TRUE,
-                        "X_sp": X_sp,
-                        "X_lasso": X_lasso,
-                        "error_sp": error_sp,
-                        "error_lasso": error_lasso,
-                    }
-                )
+                results[(num_mics, num_sources, s_sparse)] = {
+                    "num_mics": num_mics,
+                    "num_sources": num_sources,
+                    "s_sparse": s_sparse,
+                    "X_TRUE": X_TRUE,
+                    "X_sp": X_sp,
+                    "X_lasso": X_lasso,
+                    "error_sp": error_sp,
+                    "error_lasso": error_lasso,
+                }
+
     return results
 
 
+# Legacy
 def heatmap_sparsity_comparison(results, s_sparse):
+    """
+    This function is legacy and only used in LASSO_comparison.ipynb
+    It creates heatmaps comparing the error in number of non-zeros for
+    Sparse Prior and LASSO methods across different numbers of microphones
+    and sources, for a fixed sparsity level s_sparse.
+
+    It does not take the average over multiple seeds, the proceeding functions do that.
+    """
     import pandas as pd
 
-    df = pd.DataFrame(results)
+    df = pd.DataFrame.from_dict(results, orient='index')
 
     # Filter to only include rows with the specified s_sparse value
     df = df[df['s_sparse'] == s_sparse]
@@ -201,6 +212,185 @@ def heatmap_sparsity_comparison(results, s_sparse):
     plt.ylabel("Number of Sources")
 
     plt.tight_layout()
+    plt.show()
+
+
+def average_sparsity_comparison(
+    mic_range=[],
+    sources=100,
+    sparsity_range=[],
+    num_seeds=None,
+    alpha=1e-3,
+    debug=False,
+):
+
+    # returns a 2d matrix with a fixed number of sources and the error for each combination of num_mics and s_sparse averaged over num_seeds
+    results = {}
+    for num_mics in mic_range:
+        for s_sparse in sparsity_range:
+            sum_error_X0 = 0
+            sum_error_lasso = 0
+            sum_error_sp = 0
+            for seed in range(num_seeds):
+                np.random.seed(seed)
+                random.seed(seed)  # s_sparse_sources uses random.choice, not np.random
+                Y, A, X0, X_TRUE = just_YAX_from_simulation(
+                    num_mics=num_mics,
+                    num_sources=sources,
+                    s_sparse=s_sparse,
+                    angle_step=2 * np.pi / sources,
+                )
+                X_sp, B = sparse_prior_solution(X0, A)
+                X_lasso = complex_lasso(A, Y, alpha=alpha)
+
+                threshold = noise_threshold(X0)
+
+                error_X0 = nonzero_difference(X_TRUE, X0, tol=threshold)
+                error_lasso = nonzero_difference(X_TRUE, X_lasso, tol=threshold)
+                error_sp = nonzero_difference(X_TRUE, X_sp, tol=threshold)
+
+                if debug and error_sp > 0:
+                    plot_equation(
+                        X_TRUE,
+                        X0,
+                        X_lasso,
+                        (r"$X_{True}$", r"$X_{0}$", r"$X_{LASSO}$"),
+                    )
+                    print(f"Seed: {seed}, Num Mics: {num_mics}, S_sparse: {s_sparse}")
+                    print(
+                        f"Error X0: {error_X0}, Error LASSO: {error_lasso}, Error SP: {error_sp}"
+                    )
+                    print(f"Threshold: {threshold}")
+
+                sum_error_X0 += error_X0
+                sum_error_lasso += error_lasso
+                sum_error_sp += error_sp
+
+            results[(num_mics, s_sparse)] = {
+                'error_lasso': sum_error_lasso / num_seeds,
+                'error_sp': sum_error_sp / num_seeds,
+                'error_X0': sum_error_X0 / num_seeds,
+            }
+    return results
+
+
+def heatmap_average(
+    mic_range, sources, sparsity_range, num_seeds=None, alpha=1e-3, debug=False
+):
+    results = average_sparsity_comparison(
+        mic_range=mic_range,
+        sources=sources,
+        sparsity_range=sparsity_range,
+        num_seeds=num_seeds,
+        alpha=alpha,
+        debug=debug,
+    )
+    import pandas as pd
+
+    df = pd.DataFrame.from_dict(results, orient='index')
+
+    # Calculate global min and max across all methods for consistent color scale
+    all_values = []
+    for method in ['error_X0', 'error_lasso', 'error_sp']:
+        pivot_table = df.pivot_table(
+            index=df.index.get_level_values(0),
+            columns=df.index.get_level_values(1),
+            values=method,
+        )
+        all_values.extend(pivot_table.values.flatten())
+    vmin = np.nanmin(all_values)
+    vmax = np.nanmax(all_values)
+
+    # Plot heatmaps for each method
+    for method in ['error_X0', 'error_lasso', 'error_sp']:
+        pivot_table = df.pivot_table(
+            index=df.index.get_level_values(0),
+            columns=df.index.get_level_values(1),
+            values=method,
+        )
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(
+            pivot_table, annot=True, fmt=".2f", cmap="viridis", vmin=vmin, vmax=vmax
+        )
+        plt.title(f"Heatmap of {method} (sources={sources})")
+        plt.xlabel("Sparsity level (s_sparse)")
+        plt.ylabel("Number of microphones (num_mics)")
+        plt.show()
+
+
+def compare_minimal_angle(
+    angle_steps, num_mics, num_sources, num_seeds=1, autoset=False
+):
+    error_lasso = np.zeros(len(angle_steps))
+    error_sp = np.zeros(len(angle_steps))
+    error_X0 = np.zeros(len(angle_steps))
+
+    for seed in range(num_seeds):
+        np.random.seed(seed)
+        random.seed(seed)
+        for i, angle_step in enumerate(angle_steps):
+            angle_base = np.random.uniform(0, 360)
+            phase_step = np.random.uniform(0, 2 * np.pi)
+
+            if autoset:
+                num_sources = int(2 * np.pi / angle_step)
+                num_mics = int(autoset * num_sources)
+                print(f"Auto setting {num_sources} sources and {num_mics} mics")
+
+            Y, A, X0, X_TRUE = just_YAX_from_simulation(
+                num_mics=num_mics,
+                num_sources=num_sources,
+                s_sparse=num_sources,
+                angle_step=angle_step,
+                angle_base=angle_base,
+                phase_step=phase_step,
+            )
+            X_sp, B = sparse_prior_solution(X0, A)
+            X_lasso = complex_lasso(A, Y, alpha=1e-3)
+
+            error_lasso[i] = np.linalg.norm(
+                X_lasso.reshape(-1, 1) - X_TRUE.reshape(-1, 1)
+            ) / np.linalg.norm(X_TRUE)
+            error_sp[i] = np.linalg.norm(
+                X_sp.reshape(-1, 1) - X_TRUE.reshape(-1, 1)
+            ) / np.linalg.norm(X_TRUE)
+            error_X0[i] = np.linalg.norm(
+                X0.reshape(-1, 1) - X_TRUE.reshape(-1, 1)
+            ) / np.linalg.norm(X_TRUE)
+
+        sp_marker_size = 5
+        # only set the label once
+        if seed == num_seeds - 1:
+            plt.plot(
+                angle_steps,
+                error_X0,
+                label="Pseudo-inverse",
+                color="gray",
+                linestyle="--",
+            )
+            plt.scatter(angle_steps, error_lasso, label="LASSO", color="orange")
+            plt.scatter(
+                angle_steps,
+                error_sp,
+                label="Sparse Prior",
+                color="blue",
+                marker="x",
+                s=30,
+            )
+        else:
+            plt.plot(angle_steps, error_X0, color="gray", linestyle="--")
+            plt.scatter(angle_steps, error_lasso, color="orange")
+            plt.scatter(
+                angle_steps, error_sp, color="blue", marker="o", s=sp_marker_size
+            )
+
+    if not autoset:
+        plt.xscale("log")
+    plt.xlabel("Angle step (degrees)")
+    plt.ylabel("Relative error")
+    plt.grid(True, which="both", ls="--")
+    plt.legend()
+    plt.title("Reconstruction error vs angle step")
     plt.show()
 
 

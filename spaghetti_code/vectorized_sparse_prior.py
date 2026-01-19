@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import scipy.optimize as optimize
 
@@ -20,7 +21,7 @@ def to_real_augmented(x_complex: np.ndarray) -> np.ndarray:
 
 def from_real_augmented(x_real: np.ndarray) -> np.ndarray:
     n = x_real.shape[0] // 2
-    return (x_real[:n] + 1j * x_real[n:]).reshape(-1, 1)
+    return (x_real[:n] * x_real[n:]).reshape(-1, 1)
 
 
 def covariance_matrices(
@@ -28,6 +29,15 @@ def covariance_matrices(
 ) -> list[np.ndarray]:
     return [
         np.diag([variance if j == i else spread for j in range(num_sources)])
+        for i in range(num_sources)
+    ]
+
+
+def covariance_diagonals(
+    num_sources: int, variance: float = 1.0, spread: float = 0.005
+) -> list[np.ndarray]:
+    return [
+        np.array([variance if j == i else spread for j in range(num_sources)])
         for i in range(num_sources)
     ]
 
@@ -50,13 +60,22 @@ def optimize_objective(X0_real, B_real, D, callback=None, z_start=None):
         # numpy broadcasting will make row vectors if z is 1D
         # X0_real has shape (N,) whereas B_real @ z has shape (N, 1)
         x = X0_real.reshape(-1, 1) + (B_real @ z.reshape(-1, 1)).reshape(-1, 1)
+        # x_flat = x.flatten()
         return -sum(np.exp(-quad_form(x, D_i)) for D_i in D)
+        # return -sum(np.exp(-np.dot(x_flat * d_i, x_flat)) for d_i in D)
 
     def first_derivative_objective(z: np.ndarray) -> np.ndarray:
         # (-1) e^{-(x_0 + Bz)^T D (x_0+Bz)}(B^T(D + D^T) (x_0 + B z))
         # where D_i is symmetric
         x = X0_real.reshape(-1, 1) + (B_real @ z.reshape(-1, 1))
+        # x_flat = x.flatten()
         grad = np.zeros_like(z)
+
+        # for d_i in D:
+        #     qf = np.dot(x_flat * d_i, x_flat)  # x^T D x
+        #     exp_neg_qf = np.exp(-qf)
+        #     grad += 2 * exp_neg_qf * (B_real.T @ (d_i * x_flat))
+
         for D_i in D:
             qf = quad_form(x, D_i)
             exp_neg_qf = np.exp(-qf)
@@ -81,6 +100,7 @@ def optimize_objective(X0_real, B_real, D, callback=None, z_start=None):
     if z_start is None:
         z_start = np.zeros(B_real.shape[1])
 
+    start_time = time.time()
     res = optimize.minimize(
         negative_objective,
         z_start,
@@ -89,7 +109,8 @@ def optimize_objective(X0_real, B_real, D, callback=None, z_start=None):
         jac=first_derivative_objective,
         # hess=second_derivative_objective,
     )
-    # print(res.message)
+    end_time = time.time()
+    # print(f"Optimization time: {end_time - start_time:.4f} seconds")
     z_opt = res.x
     x_opt = X0_real.reshape(-1, 1) + (B_real @ z_opt.reshape(-1, 1))
     x_opt_complex = from_real_augmented(x_opt)
@@ -106,7 +127,7 @@ def sparse_prior_solution(X0, A) -> tuple[np.ndarray, np.ndarray]:
     rank = np.sum(S > 1e-10)
 
     # Check if there is a null space
-    if rank == A.shape[1]: # A is mics x sources
+    if rank == A.shape[1]:
         # No null space, return the pseudoinverse solution
         return X0, None
 

@@ -61,7 +61,7 @@ def waveforms_at_mics(mics, sources, sampling_rate, duration=None):
     return t, composite_waveforms, individual_waveforms, delays_dict
 
 
-def s_sparse_sources(s, sources, seed=2025):
+def s_sparse_sources(s, sources, seed=None):
     sparse_sources = [
         SoundSource(
             distance=src.distance,
@@ -73,7 +73,8 @@ def s_sparse_sources(s, sources, seed=2025):
         )
         for src in sources
     ]
-    random.seed(seed)
+    if seed is not None:
+        random.seed(seed)
     indicies = random.sample(range(len(sources)), s)
     for i in indicies:
         sparse_sources[i] = sources[i]
@@ -196,3 +197,27 @@ def run_simulation(
         N=N,
         active_indices=active_indices,
     )
+
+
+def just_YAX_from_simulation(
+    num_mics=3,
+    num_sources=5,
+    s_sparse=2,
+    freq_index=1,
+    angle_step=0.3,
+    angle_base=np.pi / 4,
+    phase_step=0.3,
+):
+    sim = run_simulation(
+        num_mics=num_mics,
+        num_sources=num_sources,
+        s_sparse=s_sparse,
+        angle_step=angle_step,
+        angle_base=angle_base,
+        phase_step=phase_step,
+    )
+    Y = sim.Y[:, freq_index]  # Measurements
+    A = sim.C[:, :, freq_index]  # Mixing matrix
+    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
+    X_TRUE = sim.X[:, freq_index]  # True source signals
+    return Y, A, X0, X_TRUE
