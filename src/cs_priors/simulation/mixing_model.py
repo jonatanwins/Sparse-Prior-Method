@@ -27,13 +27,26 @@ def single_waveform_at_all_mics(mics, src, t):
 
     # at the microphone, hence the shift
     # BUG SQUASH: the shift is negative as we are at an earlier stage of the signal
-    waveforms = np.array(
-        [
-            src.amplitude
-            * src.function(2 * np.pi * src.frequency * (t - delay) + src.phase)
-            for delay in delays
-        ]
-    )
+
+    if isinstance(src.frequency, (list, np.ndarray)):
+        # Sum multiple frequency components
+        waveforms = np.zeros((len(mics), len(t)))
+        for freq in src.frequency:
+            waveforms += np.array(
+                [
+                    src.amplitude
+                    * src.function(2 * np.pi * freq * (t - delay) + src.phase)
+                    for delay in delays
+                ]
+            )
+    else:
+        waveforms = np.array(
+            [
+                src.amplitude
+                * src.function(2 * np.pi * src.frequency * (t - delay) + src.phase)
+                for delay in delays
+            ]
+        )
 
     return waveforms, delays
 
@@ -88,6 +101,7 @@ def run_simulation(
     num_sources=1,
     s_sparse=None,
     f0=100,
+    frequencies=None,
     distance=1.5,
     amplitude=2,
     amplitude_step=0,
@@ -108,26 +122,74 @@ def run_simulation(
         raise ValueError("array_type must be 'linear' or 'circular'")
 
     # 2. Create sound sources.
-    sources = [
-        SoundSource(
-            distance=distance,
-            angle=angle_base + angle_step * a,
-            frequency=f0,
-            amplitude=amplitude,
-            phase=phase_step * a,
-            function=np.sin,
+    # Broadband sources, e.g. frequencies = [[100, 200], [150, 250], ...]
+    if frequencies is not None:
+        sources = [
+            SoundSource(
+                distance=distance,
+                angle=angle_base + angle_step * a,
+                frequency=frequencies[a],
+                amplitude=amplitude,
+                phase=phase_step * a,
+                function=np.sin,
+            )
+            for a in range(num_sources)
+        ]
+        # list of the form [[100, 150, 200], [300]] get the max frequency
+        f_min = min(min(freq_list) for freq_list in frequencies)
+        f_max = max(max(freq_list) for freq_list in frequencies)
+        simulation_duration = 1 / f_min
+        SAMPLING_RATE = sampling_rate_factor * f_max
+
+    # if there is only one frequency, all sources have the same frequency
+    elif isinstance(f0, (int, float)):
+        sources = [
+            SoundSource(
+                distance=distance,
+                angle=angle_base + angle_step * a,
+                frequency=f0,
+                amplitude=amplitude,
+                phase=phase_step * a,
+                function=np.sin,
+            )
+            for a in range(num_sources)
+        ]
+        simulation_duration = 1 / f0
+        SAMPLING_RATE = sampling_rate_factor * f0
+
+    # Each source has its own frequency
+    elif isinstance(f0, (list, np.ndarray)):
+        if len(f0) != num_sources:
+            raise ValueError(
+                "If f0 is a list or array, its length must match num_sources"
+            )
+        sources = [
+            SoundSource(
+                distance=distance,
+                angle=angle_base + angle_step * a,
+                frequency=f0[a],
+                amplitude=amplitude + amplitude_step * a,
+                phase=phase_step * a,
+                function=np.sin,
+            )
+            for a in range(num_sources)
+        ]
+        f_min = min(f0)
+        f_max = max(f0)
+        simulation_duration = 1 / f_min
+        SAMPLING_RATE = sampling_rate_factor * f_max
+    else:
+        raise ValueError(
+            "f0 must be a number, list, or array or frequencies argument must be provided"
         )
-        for a in range(num_sources)
-    ]
+
+    # Apply sparsity if specified.
     if s_sparse is not None and s_sparse < num_sources:
         sources, active_indices = s_sparse_sources(s_sparse, sources)
     else:
         active_indices = list(range(num_sources))
 
     # 3. Define sampling parameters.
-    SAMPLING_RATE = sampling_rate_factor * f0
-    if simulation_duration is None:
-        simulation_duration = max(1 / src.frequency for src in sources)
     N = int(SAMPLING_RATE * simulation_duration)
 
     # 4. Simulate the waveforms at the microphones.
@@ -136,12 +198,24 @@ def run_simulation(
     )
 
     # 5. TIME DOMAIN SIGNALS.
-    x_time = np.array(
-        [
-            src.amplitude * src.function(2 * np.pi * src.frequency * t + src.phase)
-            for src in sources
-        ]
-    )
+    if frequencies is not None:
+        x_time = np.array(
+            [
+                sum(
+                    src.amplitude * src.function(2 * np.pi * freq * t + src.phase)
+                    for freq in src.frequency
+                )
+                for src in sources
+            ]
+        )
+    else:
+        # print("Assuming single frequency per source")
+        x_time = np.array(
+            [
+                src.amplitude * src.function(2 * np.pi * src.frequency * t + src.phase)
+                for src in sources
+            ]
+        )
     y_time = composite_waveforms
 
     # 6. FREQUENCY DOMAIN PROCESSING.

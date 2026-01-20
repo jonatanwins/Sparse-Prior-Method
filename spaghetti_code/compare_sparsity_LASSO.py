@@ -4,6 +4,8 @@ import time
 import scipy.optimize as optimize
 import seaborn as sns
 from sklearn.linear_model import Lasso
+from typeguard import typechecked
+
 
 # Add the src directory to the Python path
 # This allows us to import modules from cs_priors
@@ -22,6 +24,7 @@ from cs_priors.plotting.plotting import (
     plot_two_line_equation,
     plot_overview,
 )
+
 from cs_priors.solvers.sparse_prior import (
     to_real_augmented,
     from_real_augmented,
@@ -62,7 +65,7 @@ def initialize_underdetermined_system(
     return X_true, A, Y
 
 
-def just_YAX_from_simulation( # moved to mixing_model.py
+def just_YAX_from_simulation(  # moved to mixing_model.py
     num_mics=3,
     num_sources=5,
     s_sparse=2,
@@ -111,18 +114,19 @@ def complex_lasso(A, Y, alpha=0.1):
     return X_complex
 
 
-def noise_threshold(X0, tolerance_factor=0.1):
+@typechecked
+def noise_threshold(X0, tolerance_factor: float = 0.1):
     # X0 is complex valued, we need to set the threshold based on its maximum value in absolute terms
     max_absolute = np.abs(X0).max()
     threshold = np.abs(tolerance_factor * max_absolute)
     return threshold
 
 
-def count_nonzero(x, tol):
+def count_nonzero(x, tol: float):
     return np.sum(np.abs(x) > tol)
 
 
-def nonzero_difference(X1, X2, tol):
+def nonzero_difference(X1, X2, tol: float):
     # X1 and X2 are numpy arrays
     s_X1 = count_nonzero(X1, tol)
     s_X2 = count_nonzero(X2, tol)
@@ -401,15 +405,15 @@ if __name__ == "__main__":
     # plot_overview(sim)
 
     freq_index = 1
-    Y = sim.Y[:, freq_index]  # Measurements
+    Y = sim.Y[:, freq_index].reshape(-1, 1)  # Measurements
     A = sim.C[:, :, freq_index]  # Mixing matrix
-    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
-    X_TRUE = sim.X[:, freq_index]  # True source signals
+    X0 = (np.linalg.pinv(A) @ Y).reshape(-1, 1)  # initial guess for X
+    X_TRUE = sim.X[:, freq_index].reshape(-1, 1)  # True source signals
 
     X_sp, B = sparse_prior_solution(X0, A)
     X_lasso = complex_lasso(A, Y, alpha=0.1)
 
-    threshold = noise_threshold(Y, A)
+    threshold = noise_threshold(Y)
     print(f"Noise threshold: {threshold}")
     print(f"Number of non-zeros in True X: {count_nonzero(X_TRUE, tol=threshold)}")
     print(

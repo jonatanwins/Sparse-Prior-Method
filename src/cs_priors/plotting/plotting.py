@@ -1,8 +1,8 @@
 from itertools import cycle
-
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import hsv_to_rgb
+from ..plotting.plot_complex import *
+
 
 colors = cycle(["#FFA343", "#FF1744", "#9A4DFF", "#00BFA5", "#3498DB"])
 yellow = "#FFA343"
@@ -143,9 +143,12 @@ def plot_geometry_on_ax(
         if show_frequency:
 
             # Construct the annotation string with frequency and (if applicable) phase
-            label = f"{src.frequency:.0f} Hz" + (
-                f"\n{src.phase:.2f} rad" if src.phase != 0.0 else ""
-            )
+            if isinstance(src.frequency, (int, float)):
+                label = f"{src.frequency:.0f} Hz" + (
+                    f"\n{src.phase:.2f} rad" if src.phase != 0.0 else ""
+                )
+            else:
+                label = "Multiple Frequencies"
 
             # Annotate at the desired offset
             ax.text(
@@ -607,101 +610,6 @@ def plot_Y_comparison(Y_f0, Y_pred_f0):
     fig.suptitle("Comparison of Fourier Coefficients at f0", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
-
-
-def complex_to_rgb(matrix):
-    """
-    Convert a complex matrix to an RGB image using an HSV mapping:
-      - Hue: phase (normalized from -pi to pi → 0 to 1)
-      - Saturation: fixed at 1.
-      - Value: magnitude (normalized to 0-1), but set to 0 (black) for small magnitudes regardless of angle.
-    """
-    # Ensure matrix is two-dimensional.
-    mat = np.atleast_2d(matrix)
-
-    # Compute phase and magnitude.
-    phase = np.angle(mat)  # Range: [-pi, pi]
-    magnitude = np.abs(mat)
-
-    # Normalize phase to [0,1].
-    norm_phase = (phase + np.pi) / (2 * np.pi)
-    # Normalize magnitude to [0,1] using its maximum.
-    max_mag = magnitude.max() if magnitude.max() != 0 else 1
-    norm_mag = magnitude / max_mag
-
-    # Build an HSV image.
-    hsv = np.zeros(mat.shape + (3,))
-    hsv[..., 0] = norm_phase  # Hue from phase.
-    hsv[..., 1] = 1  # Full saturation.
-    hsv[..., 2] = norm_mag  # Value from normalized magnitude.
-
-    # Set values with small magnitude to black (Value = 0) regardless of angle.
-    # Use a threshold of 0.0001 for magnitude, matching the display logic elsewhere.
-    threshold = 0.0001
-    small_mask = magnitude < threshold
-    hsv[small_mask, 2] = 0  # Set Value to 0 for small magnitudes.
-
-    # Convert HSV to RGB.
-    rgb = hsv_to_rgb(hsv)
-    return rgb
-
-
-def plot_complex_matrix_on_ax(
-    ax, matrix, title="", show_values=True, polar=False, font_size=8
-):
-    """
-    Plot a complex matrix on the provided Axes object using an HSV mapping.
-
-    The cell color is determined by:
-      - Hue: phase of the complex number.
-      - Value: magnitude.
-
-    Optionally, the numerical complex value is overlaid.
-    """
-    # Expand if single column vector
-    # not sure if this causes problems
-    # essential that it is before complex to rgb
-    if np.ndim(matrix) < 2:
-        matrix = np.expand_dims(matrix, axis=1)
-
-    # Convert the complex matrix to an RGB image.
-    rgb = complex_to_rgb(matrix)
-    ax.imshow(rgb, interpolation="none", aspect="auto")
-    ax.set_title(title)
-    # set the title size
-    ax.title.set_fontsize(font_size + 20)
-    ax.axis("off")
-
-    if show_values:
-        n, m = matrix.shape
-        for i in range(n):
-            for j in range(m):
-                if abs(matrix[i, j]) < 0.01:
-                    value_str = "0"
-                elif polar:
-                    # Compute magnitude and phase (in degrees)
-                    r = np.abs(matrix[i, j])
-                    if polar == "absolute":
-                        value_str = f"{r:.1f}"
-                    else:
-                        theta = np.angle(matrix[i, j], deg=True)
-                        if theta == 180:
-                            value_str = f"{-r:.1f}"
-                        elif theta == 0:
-                            value_str = f"{r:.1f}"
-                        else:
-                            value_str = f"{r:.1f}∠{theta:.0f}°"
-                else:
-                    value_str = f"{matrix[i, j].real:.1f}{matrix[i, j].imag:+.1f}j"
-                ax.text(
-                    j,
-                    i,
-                    value_str,
-                    ha="center",
-                    va="center",
-                    color="white",
-                    fontsize=font_size,
-                )
 
 
 def plot_complex_matrix(matrix, title="Complex Matrix", show_values=True):
