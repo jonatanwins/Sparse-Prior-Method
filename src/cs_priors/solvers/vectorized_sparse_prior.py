@@ -19,41 +19,48 @@ def from_real_augmented(x_real: np.ndarray) -> np.ndarray:
     return (x_real[:n] + 1j * x_real[n:]).reshape(-1, 1)
 
 
-def covariance_diagonals(
-    num_sources: int, variance: float = 1.0, spread: float = 0.005
-) -> np.ndarray:
-    return [
-        np.array([variance if j == i else spread for j in range(num_sources)])
-        for i in range(num_sources)
-    ]
-
-
 def optimize_real_valued_objective(
-    X0_real, B_real, D_diagonals, callback=None, z_start=None
+    X0_real,
+    B_real,
+    variance: float = 1.0,
+    spread: float = 0.005,
+    callback=None,
+    z_start=None,
 ):
+    delta = variance - spread  # Coefficient difference
 
     def negative_objective(z: np.ndarray) -> float:
-        # numpy broadcasting will make row vectors if z is 1D
-        # X0_real has shape (N,) whereas B_real @ z has shape (N, 1)
-        x = X0_real.reshape(-1, 1) + (B_real @ z.reshape(-1, 1)).reshape(-1, 1)
-        x_flat = x.flatten()  # Convert to 1D for element-wise operations
-        return -sum(
-            np.exp(-np.dot(d_i * x_flat, x_flat))  # Returns scalar: x^T D x
-            for d_i in D_diagonals
-        )
+        x = (X0_real.reshape(-1, 1) + B_real @ z.reshape(-1, 1)).flatten()
+
+        norm_squared = np.sum(x**2)
+        # sum_i exp(-x^T D_i x) = exp(-spread * ||x||^2) * sum_i exp(-delta * x[i]^2)
+        global_factor = np.exp(-spread * norm_squared)
+        individual_sum = np.sum(np.exp(-delta * x**2))
+
+        return -global_factor * individual_sum
 
     def first_derivative_objective(z: np.ndarray) -> np.ndarray:
         # (-1) e^{-(x_0 + Bz)^T D (x_0+Bz)}(B^T(D + D^T) (x_0 + B z))
         # where D_i is symmetric
+        # It can be computed more efficiently as follows:
+        # B^T (-2e^{-(-spread * ||x||^2} * [ spread * x * sum_i e^{-delta * x[i]^2} + delta * elementwise(x, e^{-delta * x^2}) ]
+        # where delta = variance - spread
         x = X0_real.reshape(-1, 1) + (B_real @ z.reshape(-1, 1))
-        grad = np.zeros_like(z)
-        for d_i in D_diagonals:
-            exp_term = np.exp(-np.sum(d_i * (x**2), axis=0))
-            grad += -exp_term * (B_real.T @ (2 * d_i.reshape(-1, 1) * x)).flatten()
-        return grad
+        x_flat = x.flatten()
+
+        # Compute quadratic forms efficiently
+        norm_squared = np.sum(x_flat**2)
+        global_factor = np.exp(-spread * norm_squared)
+        exp_terms = np.exp(-delta * x**2)
+        individual_sum = np.sum(exp_terms)
+
+        dx = -2 * global_factor * (spread * x * individual_sum + delta * x * exp_terms)
+        grad = B_real.T @ dx
+
+        return -grad.reshape(-1)
 
     if z_start is None:
-        z_start = np.zeros(B_real.shape[1])
+        z_start = np.zeros(B_real.shape[1], dtype=float)
 
     result = optimize.minimize(
         negative_objective,
@@ -62,6 +69,7 @@ def optimize_real_valued_objective(
         callback=callback,
         method="L-BFGS-B",
     )
+
     return result
 
 
@@ -75,16 +83,14 @@ def sparse_prior_solution(X0: np.ndarray, A: np.ndarray):
         return X0, None
 
     # Null space basis vectors are the last (num_sources - rank) rows of Vh
-    B = Vh[rank:].conj().T  # Shape (num_sources, dim_null_space)
+    # TODO: this might need to be conjugated
+    B = Vh[rank:].T  # Shape (num_sources, dim_null_space)
 
     X0_real = to_real_augmented(X0)
     B_real = to_real_augmented(B)
 
-    # Save memory by only forming the diagonals of the covariance matrices
-    D_diagonals = covariance_diagonals(A.shape[1])
-
     # Optimize the objective function in the null space
-    result = optimize_real_valued_objective(X0_real, B_real, D_diagonals)
+    result = optimize_real_valued_objective(X0_real, B_real, variance=1.0, spread=0.005)
 
     # Reconstruct the solution
     z_opt = result.x

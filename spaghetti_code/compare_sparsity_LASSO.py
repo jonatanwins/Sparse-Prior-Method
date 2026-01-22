@@ -25,11 +25,12 @@ from cs_priors.plotting.plotting import (
     plot_overview,
 )
 
-from cs_priors.solvers.sparse_prior import (
+from cs_priors.solvers.vectorized_sparse_prior import (
     to_real_augmented,
     from_real_augmented,
     sparse_prior_solution,
 )
+from cs_priors.solvers.complex_lasso import complex_lasso
 
 
 def initialize_underdetermined_system(
@@ -87,31 +88,6 @@ def just_YAX_from_simulation(  # moved to mixing_model.py
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
     X_TRUE = sim.X[:, freq_index]  # True source signals
     return Y, A, X0, X_TRUE
-
-
-def complex_lasso(A, Y, alpha=0.1):
-    """
-    Solve the complex LASSO problem by converting to a real-valued problem.
-    Minimize ||Y - A X||_2^2 + alpha * ||X||_1
-    where A is complex, Y is complex, and X is complex.---_
-    """
-    # If A is full rank, we do not need LASSO
-    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
-    mics, sources = A.shape
-    if mics >= sources:
-        return X0
-
-    X0_real = to_real_augmented(X0)
-    A_real = to_real_augmented(A)
-    Y_real = to_real_augmented(Y)
-
-    lasso = Lasso(alpha=alpha, fit_intercept=False, max_iter=10000)
-    lasso.coef_ = X0_real.flatten()
-    lasso.fit(A_real, Y_real)
-    X_real = lasso.coef_
-
-    X_complex = from_real_augmented(X_real)
-    return X_complex
 
 
 @typechecked
@@ -220,10 +196,10 @@ def heatmap_sparsity_comparison(results, s_sparse):
 
 
 def average_sparsity_comparison(
-    mic_range=[],
-    sources=100,
-    sparsity_range=[],
-    num_seeds=None,
+    mic_range: list[int],
+    sources: int,
+    sparsity_range: list[int],
+    num_seeds: int,
     alpha=1e-3,
     debug=False,
 ):
@@ -279,7 +255,12 @@ def average_sparsity_comparison(
 
 
 def heatmap_average(
-    mic_range, sources, sparsity_range, num_seeds=None, alpha=1e-3, debug=False
+    mic_range: list[int],
+    sources: int,
+    sparsity_range: list[int],
+    num_seeds: int,
+    alpha=1e-3,
+    debug=False,
 ):
     results = average_sparsity_comparison(
         mic_range=mic_range,

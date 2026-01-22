@@ -106,11 +106,12 @@ def sparse_prior_solution(X0, A) -> tuple[np.ndarray, np.ndarray]:
     rank = np.sum(S > 1e-10)
 
     # Check if there is a null space
-    if rank == A.shape[1]: # A is mics x sources
+    if rank == A.shape[1]:  # A is mics x sources
         # No null space, return the pseudoinverse solution
         return X0, None
 
     # Compute the basis for the null space
+    # TODO: Vt might need to be conjugated, i.e. Vh
     B = Vt[rank:].T
     B_real = np.block([[B.real, -B.imag], [B.imag, B.real]])
     X0_real = to_real_augmented(X0)
