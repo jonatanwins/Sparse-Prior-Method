@@ -101,7 +101,11 @@ def plot_complex_matrix_on_ax(
 
 @typechecked
 def plot_matrices(
-    matrices: list, titles: list[str] | None = None, polar=False, font_size=8
+    matrices: list,
+    titles: list[str] | None = None,
+    show_values=True,
+    polar=True,
+    font_size=8,
 ):
     """
     Plot multiple complex matrices in an automatically arranged grid.
@@ -137,7 +141,12 @@ def plot_matrices(
     # Plot each matrix
     for i in range(num_matrices):
         plot_complex_matrix_on_ax(
-            axes[i], matrices[i], title=titles[i], polar=polar, font_size=font_size
+            axes[i],
+            matrices[i],
+            title=titles[i],
+            show_values=show_values,
+            polar=polar,
+            font_size=font_size,
         )
 
     # Hide unused subplots

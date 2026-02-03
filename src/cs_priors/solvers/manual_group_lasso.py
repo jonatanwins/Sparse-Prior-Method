@@ -23,8 +23,7 @@ def group_lasso(Y, A, group_indices, alpha, max_iter=1000):
     Returns:
         X_opt: Optimized coefficient matrix (N x 1)
     """
-    P, _ = Y.shape
-    N = A.shape[1]
+    P, N = A.shape
     X_opt = np.linalg.pinv(A) @ Y  # Initial solution
 
     def negative_objective(X):
@@ -87,5 +86,6 @@ if __name__ == "__main__":
 
     X0, A, Y, X_TRUE = just_YAX_from_simulation()
     X0_wide, group_indices = groups_on_complex_numbers(X0)
+    print("Group indices:", group_indices)
 
-    plot_equation(X0_wide, X0, Y, ("X0_wide", "X0", "Y"))
+    # plot_equation(X0_wide, X0, Y, ("X0_wide", "X0", "Y"))

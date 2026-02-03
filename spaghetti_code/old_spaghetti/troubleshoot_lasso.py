@@ -1,6 +1,6 @@
 from sklearn.linear_model import Lasso
 import numpy as np
-from simulated_prior_optimization import to_real_augmented, from_real_augmented
+from spaghetti_code.old_spaghetti.simulated_prior_optimization import to_real_augmented, from_real_augmented
 from cs_priors.plotting.plotting import plot_equation, plot_two_line_equation
 
 

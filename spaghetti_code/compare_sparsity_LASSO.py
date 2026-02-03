@@ -5,6 +5,7 @@ import scipy.optimize as optimize
 import seaborn as sns
 from sklearn.linear_model import Lasso
 from typeguard import typechecked
+from joblib import Parallel, delayed
 
 
 # Add the src directory to the Python path
@@ -203,54 +204,52 @@ def average_sparsity_comparison(
     alpha=1e-3,
     debug=False,
 ):
+    def compute_single_case(num_mics, s_sparse, seed):
+        np.random.seed(seed)
+        random.seed(seed)
+        Y, A, X0, X_TRUE = just_YAX_from_simulation(
+            num_mics=num_mics,
+            num_sources=sources,
+            s_sparse=s_sparse,
+            angle_step=2 * np.pi / sources,
+        )
+        X_sp, B = sparse_prior_solution(X0, A)
+        X_lasso = complex_lasso(A, Y, alpha=alpha)
 
-    # returns a 2d matrix with a fixed number of sources and the error for each combination of num_mics and s_sparse averaged over num_seeds
+        threshold = noise_threshold(X0)
+        error_X0 = nonzero_difference(X_TRUE, X0, tol=threshold)
+        error_lasso = nonzero_difference(X_TRUE, X_lasso, tol=threshold)
+        error_sp = nonzero_difference(X_TRUE, X_sp, tol=threshold)
+
+        return (num_mics, s_sparse, error_X0, error_lasso, error_sp)
+
+    # Generate all parameter combinations
+    params = [(m, s, seed)
+              for m in mic_range
+              for s in sparsity_range
+              for seed in range(num_seeds)]
+
+    # Parallel execution (use n_jobs=-1 for all cores)
+    all_results = Parallel(n_jobs=-1)(
+        delayed(compute_single_case)(m, s, seed) for m, s, seed in params
+    )
+
+    # Aggregate results
     results = {}
-    for num_mics in mic_range:
-        for s_sparse in sparsity_range:
-            sum_error_X0 = 0
-            sum_error_lasso = 0
-            sum_error_sp = 0
-            for seed in range(num_seeds):
-                np.random.seed(seed)
-                random.seed(seed)  # s_sparse_sources uses random.choice, not np.random
-                Y, A, X0, X_TRUE = just_YAX_from_simulation(
-                    num_mics=num_mics,
-                    num_sources=sources,
-                    s_sparse=s_sparse,
-                    angle_step=2 * np.pi / sources,
-                )
-                X_sp, B = sparse_prior_solution(X0, A)
-                X_lasso = complex_lasso(A, Y, alpha=alpha)
+    for num_mics, s_sparse, e_X0, e_lasso, e_sp in all_results:
+        key = (num_mics, s_sparse)
+        if key not in results:
+            results[key] = {'error_X0': 0, 'error_lasso': 0, 'error_sp': 0, 'count': 0}
+        results[key]['error_X0'] += e_X0
+        results[key]['error_lasso'] += e_lasso
+        results[key]['error_sp'] += e_sp
+        results[key]['count'] += 1
 
-                threshold = noise_threshold(X0)
+    # Average
+    for key in results:
+        count = results[key].pop('count')
+        results[key] = {k: v/count for k, v in results[key].items()}
 
-                error_X0 = nonzero_difference(X_TRUE, X0, tol=threshold)
-                error_lasso = nonzero_difference(X_TRUE, X_lasso, tol=threshold)
-                error_sp = nonzero_difference(X_TRUE, X_sp, tol=threshold)
-
-                if debug and error_sp > 0:
-                    plot_equation(
-                        X_TRUE,
-                        X0,
-                        X_lasso,
-                        (r"$X_{True}$", r"$X_{0}$", r"$X_{LASSO}$"),
-                    )
-                    print(f"Seed: {seed}, Num Mics: {num_mics}, S_sparse: {s_sparse}")
-                    print(
-                        f"Error X0: {error_X0}, Error LASSO: {error_lasso}, Error SP: {error_sp}"
-                    )
-                    print(f"Threshold: {threshold}")
-
-                sum_error_X0 += error_X0
-                sum_error_lasso += error_lasso
-                sum_error_sp += error_sp
-
-            results[(num_mics, s_sparse)] = {
-                'error_lasso': sum_error_lasso / num_seeds,
-                'error_sp': sum_error_sp / num_seeds,
-                'error_X0': sum_error_X0 / num_seeds,
-            }
     return results
 
 

@@ -112,7 +112,7 @@ def sparse_prior_solution(X0, A) -> tuple[np.ndarray, np.ndarray]:
 
     # Compute the basis for the null space
     # TODO: Vt might need to be conjugated, i.e. Vh
-    B = Vt[rank:].T
+    B = Vt[rank:].conj().T
     B_real = np.block([[B.real, -B.imag], [B.imag, B.real]])
     X0_real = to_real_augmented(X0)
     D = covariance_matrices(num_sources=X0_real.shape[0])
