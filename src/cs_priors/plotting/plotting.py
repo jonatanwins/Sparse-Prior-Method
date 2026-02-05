@@ -622,7 +622,7 @@ def plot_equation(
     Y,
     C,
     X,
-    titles=("Y", "C", "X"),
+    titles=("Y", "A", "X"),
     show_values=True,
     polar=True,
     ratios=[1, 1, 1],
@@ -630,8 +630,8 @@ def plot_equation(
     font_size=8,
 ):
     """
-    Plot the matrices Y, C, and X side by side as if in the equation:
-         Y = C × X
+    Plot the matrices Y, A, and X side by side as if in the equation:
+         Y = A × X
 
     Each matrix is plotted using an HSV-based visualization with overlaid values.
     If Y or X have fewer than 2 dimensions, they are automatically expanded.

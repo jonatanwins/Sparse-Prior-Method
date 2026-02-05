@@ -282,6 +282,14 @@ def just_YAX_from_simulation(
     angle_base=np.pi / 4,
     phase_step=0.3,
 ):
+    """
+    Helper function to run a simulation and extract Y, A, X0, and X_TRUE for a specific frequency index.
+    Returns:
+        Y: Measurements at microphones for a specific frequency index
+        A: Mixing matrix at that frequency index
+        X0: Initial guess for source signals (pseudoinverse solution)
+        X_TRUE: True source signals from the simulation
+    """
     sim = run_simulation(
         num_mics=num_mics,
         num_sources=num_sources,
@@ -290,7 +298,7 @@ def just_YAX_from_simulation(
         angle_base=angle_base,
         phase_step=phase_step,
     )
-    Y = sim.Y[:, freq_index]  # Measurements
+    Y = sim.Y[:, freq_index].reshape(-1, 1)  # Measurements
     A = sim.C[:, :, freq_index]  # Mixing matrix
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
     X_TRUE = sim.X[:, freq_index]  # True source signals

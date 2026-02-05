@@ -1,9 +1,6 @@
 import sys
 from pathlib import Path
-import time
-import scipy.optimize as optimize
 import seaborn as sns
-from sklearn.linear_model import Lasso
 from typeguard import typechecked
 from joblib import Parallel, delayed
 
@@ -11,7 +8,7 @@ from joblib import Parallel, delayed
 # Add the src directory to the Python path
 # This allows us to import modules from cs_priors
 script_path = Path(__file__).resolve()
-project_root = script_path.parents[1]  # Go up two levels from script to project root
+project_root = script_path.parents[1]  # Go up one level from script to project root
 src_path = project_root / 'src'
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
@@ -19,6 +16,8 @@ if str(src_path) not in sys.path:
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+
+
 from cs_priors.simulation.mixing_model import run_simulation
 from cs_priors.plotting.plotting import (
     plot_equation,
@@ -27,8 +26,6 @@ from cs_priors.plotting.plotting import (
 )
 
 from cs_priors.solvers.vectorized_sparse_prior import (
-    to_real_augmented,
-    from_real_augmented,
     sparse_prior_solution,
 )
 from cs_priors.solvers.complex_lasso import complex_lasso
@@ -99,10 +96,47 @@ def noise_threshold(X0, tolerance_factor: float = 0.1):
     return threshold
 
 
+@typechecked
+def which_sources_active(X, tol: float):
+    # X is a numpy array (complex or real)
+    # tol is the threshold for considering a source as active
+    active_indices = np.where(np.abs(X) > tol)[0]
+    return active_indices
+
+
+@typechecked
+def wrong_predictions(X_true, X_estimated, tol: float):
+    """
+    Returns the indicies of sources that are wrongly predicted as active or inactive
+    """
+    all_indices = set(range(len(X_true)))
+    true_active = set(which_sources_active(X_true, tol))
+    estimated_active = set(which_sources_active(X_estimated, tol))
+    wrong_active = (true_active - estimated_active).union(
+        estimated_active - true_active
+    )
+    return wrong_active
+
+
+@typechecked
+def plot_wrong_predictions(X_true, X_estimated, tol: float):
+    wrong_indices = wrong_predictions(X_true, X_estimated, tol)
+    wrong_vector = np.zeros_like(X_true, dtype=float)
+    wrong_vector[list(wrong_indices)] = -1.0
+    plot_equation(
+        X_true,
+        X_estimated,
+        wrong_vector,
+        titles=("True", "Estimated", f"{len(wrong_indices)} wrong (tol: {tol:.2f})"),
+    )
+
+
+@typechecked
 def count_nonzero(x, tol: float):
     return np.sum(np.abs(x) > tol)
 
 
+@typechecked
 def nonzero_difference(X1, X2, tol: float):
     # X1 and X2 are numpy arrays
     s_X1 = count_nonzero(X1, tol)
@@ -110,9 +144,13 @@ def nonzero_difference(X1, X2, tol: float):
     return np.abs(s_X1 - s_X2)
 
 
+@typechecked
 def run_comparison_sparsity(
     mic_range=[], source_range=[], sparsity_range=[], seed=1, alpha=1e-3
 ):
+    '''
+    Compares the Sparse Prior and LASSO methods across different numbers of microphones and spar
+    '''
     np.random.seed(seed)
     results = {}
 
@@ -224,10 +262,12 @@ def average_sparsity_comparison(
         return (num_mics, s_sparse, error_X0, error_lasso, error_sp)
 
     # Generate all parameter combinations
-    params = [(m, s, seed)
-              for m in mic_range
-              for s in sparsity_range
-              for seed in range(num_seeds)]
+    params = [
+        (m, s, seed)
+        for m in mic_range
+        for s in sparsity_range
+        for seed in range(num_seeds)
+    ]
 
     # Parallel execution (use n_jobs=-1 for all cores)
     all_results = Parallel(n_jobs=-1)(
@@ -248,7 +288,7 @@ def average_sparsity_comparison(
     # Average
     for key in results:
         count = results[key].pop('count')
-        results[key] = {k: v/count for k, v in results[key].items()}
+        results[key] = {k: v / count for k, v in results[key].items()}
 
     return results
 
@@ -378,9 +418,68 @@ def compare_minimal_angle(
     plt.show()
 
 
+def tensor_correctly_detected_sources(
+    microphones=[], sources=[], sparsity_levels=[], seeds=1, alpha=1e-3
+):
+    results = {}
+
+    for num_mics in microphones:
+        for num_sources in sources:
+            for s_sparse in sparsity_levels:
+                correct_sp = 0
+                correct_lasso = 0
+
+                for seed in range(seeds):
+                    sim = run_simulation(
+                        num_mics=num_mics, num_sources=num_sources, s_sparse=s_sparse
+                    )
+                    freq_index = 1
+                    Y = sim.Y[:, freq_index]  # Measurements
+                    A = sim.C[:, :, freq_index]  # Mixing matrix
+                    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
+                    X_TRUE = sim.X[:, freq_index]  # True source signals
+
+                    X_sp, B = sparse_prior_solution(X0, A)
+                    X_lasso = complex_lasso(A, Y, alpha=alpha)
+
+                    threshold = noise_threshold(X0)
+
+                    correct_sp += number_correctly_detected_sources(
+                        X_TRUE, X_sp, tol=threshold
+                    )
+                    correct_lasso += number_correctly_detected_sources(
+                        X_TRUE, X_lasso, tol=threshold
+                    )
+
+                avg_correct_sp = correct_sp / seeds
+                avg_correct_lasso = correct_lasso / seeds
+
+                results[(num_mics, num_sources, s_sparse)] = {
+                    "num_mics": num_mics,
+                    "num_sources": num_sources,
+                    "s_sparse": s_sparse,
+                    "avg_correct_sp": avg_correct_sp,
+                    "avg_correct_lasso": avg_correct_lasso,
+                }
+
+    return results
+
+
 if __name__ == "__main__":
+    # Example usage
+    import sys
+    from pathlib import Path
+    import matplotlib.pyplot as plt
+
+    # # Add src directory to path for absolute imports when running as script
+    # src_dir = Path(__file__).parent.parent.parent
+    # sys.path.insert(0, str(src_dir))
+
+    from cs_priors.simulation.mixing_model import run_simulation
+    from cs_priors.plotting.plotting import plot_matrices
+
     s_sparse = 2
-    sim = run_simulation(num_mics=3, num_sources=5, s_sparse=s_sparse)
+    sim = run_simulation(num_mics=10, num_sources=20, s_sparse=s_sparse)
 
     # plot_overview(sim)
 
@@ -390,25 +489,15 @@ if __name__ == "__main__":
     X0 = (np.linalg.pinv(A) @ Y).reshape(-1, 1)  # initial guess for X
     X_TRUE = sim.X[:, freq_index].reshape(-1, 1)  # True source signals
 
-    X_sp, B = sparse_prior_solution(X0, A)
-    X_lasso = complex_lasso(A, Y, alpha=0.1)
+    # X_sp, B = sparse_prior_solution(X0, A)
+    X_lasso = complex_lasso(A, Y, alpha=0.001)
 
     threshold = noise_threshold(Y)
-    print(f"Noise threshold: {threshold}")
-    print(f"Number of non-zeros in True X: {count_nonzero(X_TRUE, tol=threshold)}")
-    print(
-        f"Number of non-zeros in Sparse Prior X: {count_nonzero(X_sp, tol=threshold)}"
-    )
-    print(f"Number of non-zeros in LASSO X: {count_nonzero(X_lasso, tol=threshold)}")
+    # print(f"Noise threshold: {threshold}")
+    # print(f"Number of non-zeros in True X: {count_nonzero(X_TRUE, tol=threshold)}")
+    # print(
+    #     f"Number of non-zeros in Sparse Prior X: {count_nonzero(X_sp, tol=threshold)}"
+    # )
+    # print(f"Number of non-zeros in LASSO X: {count_nonzero(X_lasso, tol=threshold)}")
 
-    # Compare solutions
-    plot_two_line_equation(
-        X_TRUE,
-        X_sp,
-        X_lasso,
-        ("True X", "Sparse Prior X", "LASSO X"),
-        X0,
-        A,
-        Y,
-        ("Initial X0", "Mixing Matrix A", "Measurements Y"),
-    )
+    plot_wrong_predictions(X_TRUE, X_lasso, tol=threshold)

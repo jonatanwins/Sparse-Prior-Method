@@ -195,6 +195,7 @@ def frequency_group_lasso(
         fit_intercept=fit_intercept,
         scale_reg="group_size",  # Scale by sqrt(group_size) as is standard
         supress_warning=True,
+        n_iter=100000,
     )
 
     model.fit(A_R, Y_R.ravel())
@@ -281,6 +282,68 @@ def color_groups(X: np.ndarray):
     return group_matrix, group_block_vector, group_augmented
 
 
+def real_augmented_to_matrix(
+    X_R: np.ndarray, num_sources: int, num_frequencies: int
+) -> np.ndarray:
+    """
+    Convert augmented real form block matrix back to complex non-block matrix.
+
+    Args:
+        X_R: Augmented real vector (2*N*F, 1)
+        num_sources: Number of sources (N)
+        num_frequencies: Number of frequencies (F)
+        structured as [Re(X_1) Re(X_2) ... Re(X_N)
+                      Im(X_1) Im(X_2) ... Im(X_N)]
+        Where each X_j has F frequencies:
+        X_j = [X_j[1], X_j[2], ..., X_j[F]]
+
+    Returns:
+        X_complex: Complex matrix (N, F)
+    """
+    assert X_R.shape == (2 * num_sources * num_frequencies, 1)
+    X_complex = np.zeros((num_sources, num_frequencies), dtype=complex)
+
+    for n in range(num_sources):
+        # Extract real and imaginary parts for this source
+        # i:i+F, i+NF: i+NF+F
+        real_start = n * num_frequencies
+        real_end = real_start + num_frequencies
+        imag_start = (num_sources + n) * num_frequencies
+        imag_end = imag_start + num_frequencies
+        X_real = X_R[real_start:real_end]
+        X_imag = X_R[imag_start:imag_end]
+
+        # Reconstruct complex values
+        X_complex[n, :] = (X_real + 1j * X_imag).flatten()
+
+    return X_complex
+
+
+def block_vector_to_matrix(
+    X_block: np.ndarray, num_sources: int, num_frequencies: int
+) -> np.ndarray:
+    """
+    Convert block vector back to complex non-block matrix.
+
+    Args:
+        X_block: Block vector (N*F, 1)
+        num_sources: Number of sources (N)
+        num_frequencies: Number of frequencies (F)
+
+    Returns:
+        X_complex: Complex matrix (N, F)
+    """
+    assert X_block.shape == (num_sources * num_frequencies, 1)
+    X_complex = np.zeros((num_sources, num_frequencies), dtype=complex)
+
+    for n in range(num_sources):
+        freq_start = n * num_frequencies
+        freq_end = freq_start + num_frequencies
+        X_complex[n, :] = X_block[freq_start:freq_end].flatten()
+
+    return X_complex
+
+
 if __name__ == "__main__":
     # Example usage
     import sys
@@ -296,24 +359,24 @@ if __name__ == "__main__":
 
     np.random.seed(42)
 
-    num_mics = 5
-    num_sources = 5
-    s_sparse = 3
+    num_mics = 10
+    num_sources = 10
+    s_sparse = 2
 
     sim = run_simulation(num_mics=num_mics, num_sources=num_sources, s_sparse=s_sparse)
 
-    # group_matrix, group_block_vector, group_augmented = color_groups(sim.X)
+    group_matrix, group_block_vector, group_augmented = color_groups(sim.X)
 
-    # plot_matrices(
-    #     [sim.X, group_matrix, group_block_vector, group_augmented],
-    #     titles=[
-    #         "Original X",
-    #         "Group Matrix",
-    #         "Group Block Vector",
-    #         "Group Augmented Real",
-    #     ],
-    #     show_values=True,
-    # )
+    plot_matrices(
+        [sim.X, group_matrix, group_block_vector, group_augmented],
+        titles=[
+            "Original X",
+            "Group Matrix",
+            "Group Block Vector",
+            "Group Augmented Real",
+        ],
+        show_values=True,
+    )
 
     A_block = tensor_to_block_matrix(sim.C)
 
@@ -321,7 +384,8 @@ if __name__ == "__main__":
 
     A_R = block_mixing_matrix_to_augmented_real(A_block, P, N, F)
     Y_block = matrix_to_block_vector(sim.Y)
-    X0 = np.linalg.pinv(A_block) @ Y_block
+    X0_block = np.linalg.pinv(A_block) @ Y_block
+    X0 = block_vector_to_matrix(X0_block, N, F)
 
     X_true = matrix_to_block_vector(sim.X)
 
@@ -331,11 +395,13 @@ if __name__ == "__main__":
         num_mics=P,
         num_sources=N,
         num_frequencies=F,
-        alpha=0.1,
+        alpha=1e-90,
     )
 
+    X_gl_matrix = block_vector_to_matrix(X_gl, N, F)
+
     plot_matrices(
-        [A_block, Y_block, sim.Y, X0, X_true, X_gl],
+        [A_block, Y_block, sim.Y, X0, sim.X, X_gl_matrix],
         titles=[
             "Mixing Matrix A (block)",
             "Measurements Y (block)",
