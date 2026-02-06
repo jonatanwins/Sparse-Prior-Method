@@ -22,8 +22,9 @@ def from_real_augmented(x_real: np.ndarray) -> np.ndarray:
 def optimize_real_valued_objective(
     X0_real,
     B_real,
-    variance: float = 1.0,
-    spread: float = 0.005,
+    variance: float,
+    spread: float,
+    max_iter: int,
     callback=None,
     z_start=None,
 ):
@@ -68,12 +69,16 @@ def optimize_real_valued_objective(
         jac=first_derivative_objective,
         callback=callback,
         method="L-BFGS-B",
+        options={
+            "maxiter": max_iter,
+            "disp": True,
+        },
     )
 
     return result
 
 
-def sparse_prior_solution(Y: np.ndarray, A: np.ndarray):
+def sparse_prior_solution(Y: np.ndarray, A: np.ndarray, max_iter=10000):
 
     X0 = np.linalg.pinv(A) @ Y
 
@@ -92,7 +97,9 @@ def sparse_prior_solution(Y: np.ndarray, A: np.ndarray):
     B_real = to_real_augmented(B)
 
     # Optimize the objective function in the null space
-    result = optimize_real_valued_objective(X0_real, B_real, variance=1.0, spread=0.005)
+    result = optimize_real_valued_objective(
+        X0_real, B_real, variance=1.0, spread=0.005, max_iter=max_iter
+    )
 
     # Reconstruct the solution
     z_opt = result.x

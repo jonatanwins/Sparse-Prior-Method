@@ -8,7 +8,9 @@ from cs_priors.solvers.vectorized_sparse_prior import (
 
 
 @typechecked
-def complex_lasso(Y: np.ndarray, A: np.ndarray, alpha: float = 0.1) -> np.ndarray:
+def complex_lasso(
+    Y: np.ndarray, A: np.ndarray, alpha: float = 0.1, max_iter: int = 10000
+) -> np.ndarray:
     """
     Solve the complex LASSO problem by converting to a real-valued problem.
     Minimize ||Y - A X||_2^2 + alpha * ||X||_1
@@ -32,7 +34,7 @@ def complex_lasso(Y: np.ndarray, A: np.ndarray, alpha: float = 0.1) -> np.ndarra
     A_real = to_real_augmented(A)
     Y_real = to_real_augmented(Y)
 
-    lasso = Lasso(alpha=alpha, fit_intercept=False, max_iter=10000)
+    lasso = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter)
     lasso.coef_ = X0_real.flatten()
     lasso.fit(A_real, Y_real)
     X_real = lasso.coef_

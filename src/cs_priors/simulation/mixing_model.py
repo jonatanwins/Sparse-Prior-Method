@@ -87,6 +87,7 @@ def s_sparse_sources(s, sources, seed=None):
         for src in sources
     ]
     if seed is not None:
+        np.random.seed(seed)
         random.seed(seed)
     indicies = random.sample(range(len(sources)), s)
     for i in indicies:
@@ -111,6 +112,7 @@ def run_simulation(
     sampling_rate_factor=10,
     simulation_duration=None,
     walls=[],
+    seed=None,
 ):
 
     # 1. Initialize microphone array.
@@ -185,7 +187,7 @@ def run_simulation(
 
     # Apply sparsity if specified.
     if s_sparse is not None and s_sparse < num_sources:
-        sources, active_indices = s_sparse_sources(s_sparse, sources)
+        sources, active_indices = s_sparse_sources(s_sparse, sources, seed=seed)
     else:
         active_indices = list(range(num_sources))
 
@@ -281,6 +283,7 @@ def just_YAX_from_simulation(
     angle_step=0.3,
     angle_base=np.pi / 4,
     phase_step=0.3,
+    seed=None,
 ):
     """
     Helper function to run a simulation and extract Y, A, X0, and X_TRUE for a specific frequency index.
@@ -297,6 +300,7 @@ def just_YAX_from_simulation(
         angle_step=angle_step,
         angle_base=angle_base,
         phase_step=phase_step,
+        seed=seed,
     )
     Y = sim.Y[:, freq_index].reshape(-1, 1)  # Measurements
     A = sim.C[:, :, freq_index]  # Mixing matrix

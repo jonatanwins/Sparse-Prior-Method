@@ -64,7 +64,7 @@ def plot_complex_matrix_on_ax(
     ax.imshow(rgb, interpolation="none", aspect="auto")
     ax.set_title(title)
     # set the title size
-    ax.title.set_fontsize(font_size + 20)
+    ax.title.set_fontsize(2 * font_size)
     ax.axis("off")
 
     if show_values:

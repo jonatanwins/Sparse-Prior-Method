@@ -4,6 +4,9 @@ import seaborn as sns
 from typeguard import typechecked
 from joblib import Parallel, delayed
 import numpy as np
+import matplotlib.pyplot as plt
+from cs_priors.plotting.plot_complex import plot_matrices
+from cs_priors.plotting.plotting import plot_equation, wrapper_plot_geometry
 
 
 # Add the src directory to the Python path
@@ -55,16 +58,25 @@ def wrong_predictions(X_true: np.ndarray, X_estimated: np.ndarray, tol: float):
 
 
 @typechecked
-def plot_wrong_predictions(X_true: np.ndarray, X_estimated: np.ndarray, tol: float):
+def vector_wrong_predictions(
+    X_true: np.ndarray, X_estimated: np.ndarray, tol: float, plot: bool = False
+):
     wrong_indices = wrong_predictions(X_true, X_estimated, tol)
     wrong_vector = np.zeros_like(X_true, dtype=float)
     wrong_vector[list(wrong_indices)] = -1.0
-    plot_equation(
-        X_true,
-        X_estimated,
-        wrong_vector,
-        titles=("True", "Estimated", f"{len(wrong_indices)} wrong (tol: {tol:.2f})"),
-    )
+    if not plot:
+        return wrong_vector
+    if plot:
+        plot_equation(
+            X_true,
+            X_estimated,
+            wrong_vector,
+            titles=(
+                "True",
+                "Estimated",
+                f"{len(wrong_indices)} wrong (tol: {tol:.2f})",
+            ),
+        )
 
 
 @typechecked
@@ -78,7 +90,7 @@ def tensor_wrong_detected_sources(
     debug: bool = False,
 ) -> dict:
     """
-    Computes the number of wrongly detected sources for two methods and the pseudoinverse across different numbers of microphones, sources, and sparsity levels.
+    Computes the number of wrongly detected sources for a method and the pseudoinverse across different numbers of microphones, sources, and sparsity levels.
     Returns a tensor of shape (len(microphones), len(sources), len(sparsities)) where each entry contains the average number of wrongly detected sources across the specified number of seeds.
     """
 
@@ -88,24 +100,59 @@ def tensor_wrong_detected_sources(
         for source in sources:
             for sparsity in sparsities:
                 wrong_counts = []
-                for _ in range(seeds):
-                    Y, A, X0, X_TRUE = just_YAX_from_simulation(
+                for seed in range(seeds):
+                    sim = run_simulation(
                         num_mics=mic,
                         num_sources=source,
                         s_sparse=sparsity,
+                        seed=seed,
+                        angle_step=2 * np.pi / source,
                     )
+                    Y = sim.Y[:, 1]
+                    A = sim.C[:, :, 1]
+                    X0 = np.linalg.pinv(A) @ Y
+                    X_TRUE = sim.X[:, 1]
+                    if (
+                        debug
+                        and seed == 0
+                        and mic == microphones[0]
+                        and source == sources[0]
+                        and sparsity == sparsities[0]
+                    ):
+                        wrapper_plot_geometry(sim, skip_labels=True)
                     tol = noise_threshold(X0, tolerance_factor=0.1)
                     X_method1 = method1(Y=Y, A=A)
                     wrong_X0 = len(wrong_predictions(X_TRUE, X0, tol))
                     wrong1 = len(wrong_predictions(X_TRUE, X_method1, tol))
                     if debug:
-                        if mic == 3 and _ == 0:
-
-                            plot_equation(
-                                X_TRUE,
-                                X_method1,
-                                X0,
-                                titles=("True", f"{name} estimate", "Pseudoinverse"),
+                        # when the method is significantly worse than the pseudoinverse, plot the wrong predictions
+                        if wrong1 > 1.1 * wrong_X0 + 2:
+                            # which indices are wrong
+                            vector_wrong1 = vector_wrong_predictions(
+                                X_TRUE, X_method1, tol, plot=False
+                            )
+                            vector_wrong_X0 = vector_wrong_predictions(
+                                X_TRUE, X0, tol, plot=False
+                            )
+                            plot_matrices(
+                                [
+                                    X0,
+                                    vector_wrong_X0,
+                                    X_TRUE,
+                                    X_method1,
+                                    vector_wrong1,
+                                    X_TRUE,
+                                ],
+                                titles=[
+                                    "X0",
+                                    f"{wrong_X0} wrong in X0",
+                                    "X_true",
+                                    name,
+                                    f"{wrong1} wrong in {name}",
+                                    "X_true",
+                                ],
+                                polar=True,
+                                font_size=10,
                             )
                     wrong_counts.append((wrong_X0, wrong1))
                 avg_wrong_X0 = np.mean([wc[0] for wc in wrong_counts])
@@ -133,7 +180,6 @@ def heatmap_average_wrong_sources(
     results = tensor_wrong_detected_sources(
         method1=method1,
         name=name,
-        # method2=method2,
         microphones=mic_range,
         sources=source_range,
         sparsities=sparsity_range,
@@ -186,9 +232,9 @@ def heatmap_average_wrong_sources(
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+
     from cs_priors.simulation.mixing_model import run_simulation
-    from cs_priors.plotting.plotting import plot_equation, plot_matrices
+
     from cs_priors.solvers.complex_lasso import complex_lasso
 
     sim = run_simulation(num_sources=10, num_mics=5, s_sparse=3)
@@ -206,6 +252,6 @@ if __name__ == "__main__":
         mic_range=[3, 5, 7, 10],
         source_range=[10],
         sparsity_range=[0, 1, 2, 3],
-        seeds=5,
+        seeds=50,
         debug=False,
     )
