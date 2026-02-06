@@ -70,13 +70,13 @@ def plot_wrong_predictions(X_true: np.ndarray, X_estimated: np.ndarray, tol: flo
 @typechecked
 def tensor_wrong_detected_sources(
     method1,
-    method2,
+    name,
     microphones: list[int],
     sources: list[int],
     sparsities: list[int],
     seeds: int = 10,
-    alpha=1e-3,
-) -> np.ndarray:
+    debug: bool = False,
+) -> dict:
     """
     Computes the number of wrongly detected sources for two methods and the pseudoinverse across different numbers of microphones, sources, and sparsity levels.
     Returns a tensor of shape (len(microphones), len(sources), len(sparsities)) where each entry contains the average number of wrongly detected sources across the specified number of seeds.
@@ -95,76 +95,94 @@ def tensor_wrong_detected_sources(
                         s_sparse=sparsity,
                     )
                     tol = noise_threshold(X0, tolerance_factor=0.1)
-                    X_method1 = method1(Y=Y, A=A, alpha=alpha)
-                    X_method2 = method2(Y=Y, A=A, alpha=alpha)
+                    X_method1 = method1(Y=Y, A=A)
                     wrong_X0 = len(wrong_predictions(X_TRUE, X0, tol))
                     wrong1 = len(wrong_predictions(X_TRUE, X_method1, tol))
-                    wrong2 = len(wrong_predictions(X_TRUE, X_method2, tol))
-                    wrong_counts.append((wrong_X0, wrong1, wrong2))
+                    if debug:
+                        if mic == 3 and _ == 0:
+
+                            plot_equation(
+                                X_TRUE,
+                                X_method1,
+                                X0,
+                                titles=("True", f"{name} estimate", "Pseudoinverse"),
+                            )
+                    wrong_counts.append((wrong_X0, wrong1))
                 avg_wrong_X0 = np.mean([wc[0] for wc in wrong_counts])
                 avg_wrong1 = np.mean([wc[1] for wc in wrong_counts])
-                avg_wrong2 = np.mean([wc[2] for wc in wrong_counts])
                 results[(mic, source, sparsity)] = (
                     avg_wrong_X0,
                     avg_wrong1,
-                    avg_wrong2,
                 )
                 results[(mic, source, sparsity)] = {
                     "avg_wrong_X0": avg_wrong_X0,
-                    "avg_wrong_method1": avg_wrong1,
-                    "avg_wrong_method2": avg_wrong2,
+                    name: avg_wrong1,
                 }
     return results
 
 
 def heatmap_average_wrong_sources(
     method1,
-    method2,
+    name,
     mic_range,
     source_range,
     sparsity_range,
     seeds=10,
-    alpha=1e-3,
     debug=False,
 ):
     results = tensor_wrong_detected_sources(
         method1=method1,
-        method2=method2,
+        name=name,
+        # method2=method2,
         microphones=mic_range,
         sources=source_range,
         sparsities=sparsity_range,
         seeds=seeds,
-        alpha=alpha,
+        debug=debug,
     )
-    # Process results into a format suitable for heatmap plotting
-    heatmap_data = np.zeros((len(mic_range), len(source_range)))
-    for i, mic in enumerate(mic_range):
-        for j, source in enumerate(source_range):
-            avg_wrong_method1 = np.mean(
-                [
-                    results[(mic, source, sparsity)]["avg_wrong_method1"]
-                    for sparsity in sparsity_range
-                ]
-            )
-            heatmap_data[i, j] = avg_wrong_method1
-            if debug:
-                print(
-                    f"Mic: {mic}, Source: {source}, Avg Wrong Method 1: {avg_wrong_method1}"
-                )
 
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(
-        heatmap_data,
-        xticklabels=source_range,
-        yticklabels=mic_range,
-        annot=True,
-        fmt=".2f",
-        cmap="viridis",
-    )
-    plt.xlabel("Number of Sources")
-    plt.ylabel("Number of Microphones")
-    plt.title("Average Number of Wrongly Detected Sources (Method 1)")
-    plt.show()
+    # If sources is fixed (length 1), create heatmap: mics vs sparsity
+    if len(source_range) == 1:
+        source = source_range[0]
+        heatmap_data = np.zeros((len(mic_range), len(sparsity_range)))
+        for i, mic in enumerate(mic_range):
+            for j, sparsity in enumerate(sparsity_range):
+                heatmap_data[i, j] = results[(mic, source, sparsity)][name]
+
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(
+            heatmap_data,
+            xticklabels=sparsity_range,
+            yticklabels=mic_range,
+            annot=True,
+            fmt=".2f",
+            cmap="viridis",
+        )
+        plt.xlabel("Sparsity")
+        plt.ylabel("Number of Microphones")
+        plt.title(f"{name} - Wrong Predictions (Sources = {source})")
+        plt.show()
+    else:
+        # Create one heatmap per sparsity level
+        for sparsity in sparsity_range:
+            heatmap_data = np.zeros((len(mic_range), len(source_range)))
+            for i, mic in enumerate(mic_range):
+                for j, source in enumerate(source_range):
+                    heatmap_data[i, j] = results[(mic, source, sparsity)][name]
+
+            plt.figure(figsize=(10, 6))
+            sns.heatmap(
+                heatmap_data,
+                xticklabels=source_range,
+                yticklabels=mic_range,
+                annot=True,
+                fmt=".2f",
+                cmap="viridis",
+            )
+            plt.xlabel("Number of Sources")
+            plt.ylabel("Number of Microphones")
+            plt.title(f"{name} - Sparsity = {sparsity}")
+            plt.show()
 
 
 if __name__ == "__main__":
@@ -183,12 +201,11 @@ if __name__ == "__main__":
     tol = noise_threshold(X0, tolerance_factor=0.1)
     # plot_wrong_predictions(X_TRUE, X_lasso, tol)
     heatmap_average_wrong_sources(
-        method1=complex_lasso,
-        method2=sparse_prior_solution,
-        mic_range=[3, 5, 7],
-        source_range=[5, 10, 15],
-        sparsity_range=[2, 4, 6],
+        method1=lambda Y, A: sparse_prior_solution(Y=Y, A=A),
+        name="Sparse Prior method",
+        mic_range=[3, 5, 7, 10],
+        source_range=[10],
+        sparsity_range=[0, 1, 2, 3],
         seeds=5,
-        alpha=0.1,
-        debug=True,
+        debug=False,
     )

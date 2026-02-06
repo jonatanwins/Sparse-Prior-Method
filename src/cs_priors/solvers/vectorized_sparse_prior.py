@@ -73,14 +73,16 @@ def optimize_real_valued_objective(
     return result
 
 
-def sparse_prior_solution(X0: np.ndarray, A: np.ndarray):
+def sparse_prior_solution(Y: np.ndarray, A: np.ndarray):
+
+    X0 = np.linalg.pinv(A) @ Y
 
     U, S, Vh = np.linalg.svd(A)
     rank = np.sum(S > 1e-10)
 
     # Check if there is a null space
     if rank == A.shape[1]:
-        return X0, None
+        return X0
 
     # Null space basis vectors are the last (num_sources - rank) rows of Vh
     # TODO: this might need to be conjugated
@@ -97,4 +99,4 @@ def sparse_prior_solution(X0: np.ndarray, A: np.ndarray):
     X_opt_real = X0_real + B_real @ z_opt.reshape(-1, 1)
     X_opt = from_real_augmented(X_opt_real)
 
-    return X_opt, B
+    return X_opt
