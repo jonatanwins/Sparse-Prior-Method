@@ -67,10 +67,10 @@ def plot_complex_matrix_on_ax(
     ax.title.set_fontsize(2 * font_size)
     ax.axis("off")
 
-    if show_values:
-        n, m = matrix.shape
-        for i in range(n):
-            for j in range(m):
+    n, m = matrix.shape
+    for i in range(n):
+        for j in range(m):
+            if show_values:
                 if abs(matrix[i, j]) < 0.01:
                     value_str = "0"
                 elif polar:
@@ -92,6 +92,17 @@ def plot_complex_matrix_on_ax(
                     j,
                     i,
                     value_str,
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=font_size,
+                )
+            # if
+            if not show_values:
+                ax.text(
+                    j,
+                    i,
+                    ".",
                     ha="center",
                     va="center",
                     color="white",

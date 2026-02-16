@@ -16,7 +16,7 @@ def complex_lasso(
     Minimize ||Y - A X||_2^2 + alpha * ||X||_1
     where A is complex, Y is complex, and X is complex.---_
     """
-    # asser that dimensions match
+    # assert that dimensions match
     assert (
         A.shape[0] == Y.shape[0]
     ), f"Number of rows in A (shape {A.shape}) must match number of rows in Y (shape {Y.shape})"

@@ -12,43 +12,47 @@ import numpy as np
 
 # from typing import Tuple, Optional
 from group_lasso import GroupLasso
+from .real_augmented import (
+    to_real_augmented,
+    from_real_augmented,
+)  # since this is a package, you need to use relative imports otherwise it will look from the top module (cs_priors)
 
 
-def create_frequency_groups(num_sources: int, num_frequencies: int) -> np.ndarray:
-    """
-    Create group indices for augmented real form where each source (direction)
-    has multiple frequencies grouped together.
+# def create_frequency_groups(num_sources: int, num_frequencies: int) -> np.ndarray:
+#     """
+#     Create group indices for augmented real form where each source (direction)
+#     has multiple frequencies grouped together.
 
-    Structure in augmented real form X_R:
-    [Re(X_1) Re(X_2) ... Re(X_N)
-    Im(X_1) Im(X_2) ... Im(X_N)]
-    where each X_j has F frequencies:
-    X_j = [X_j[1], X_j[2], ..., X_j[F]]
+#     Structure in augmented real form X_R:
+#     [Re(X_1) Re(X_2) ... Re(X_N)
+#     Im(X_1) Im(X_2) ... Im(X_N)]
+#     where each X_j has F frequencies:
+#     X_j = [X_j[1], X_j[2], ..., X_j[F]]
 
 
-    Args:
-        num_sources: Number of sources/directions (N)
-        num_frequencies: Number of frequency bins (F)
+#     Args:
+#         num_sources: Number of sources/directions (N)
+#         num_frequencies: Number of frequency bins (F)
 
-    Returns:
-        groups: Array of shape (2*N*F,) where groups[i] indicates which group
-                coefficient i belongs to. Groups are numbered 0 to N-1.
-    """
-    groups = np.zeros(2 * num_sources * num_frequencies, dtype=int)
+#     Returns:
+#         groups: Array of shape (2*N*F,) where groups[i] indicates which group
+#                 coefficient i belongs to. Groups are numbered 0 to N-1.
+#     """
+#     groups = np.zeros(2 * num_sources * num_frequencies, dtype=int)
 
-    # Each source has 2*F coefficients (F real + F imaginary)
-    group_size = 2 * num_frequencies
+#     # Each source has 2*F coefficients (F real + F imaginary)
+#     group_size = 2 * num_frequencies
 
-    # maps the F consecutive indices of the real part and F consecutive indices of the imaginary part to the same group
-    # G[iF:(i+1)F] = i
-    # G[(N+i)F:(N+i+1)F] = i
-    for source_idx in range(num_sources):
-        start_real = source_idx * num_frequencies
-        start_imag = (num_sources + source_idx) * num_frequencies
-        groups[start_real : start_real + num_frequencies] = source_idx
-        groups[start_imag : start_imag + num_frequencies] = source_idx
+#     # maps the F consecutive indices of the real part and F consecutive indices of the imaginary part to the same group
+#     # G[iF:(i+1)F] = i
+#     # G[(N+i)F:(N+i+1)F] = i
+#     for source_idx in range(num_sources):
+#         start_real = source_idx * num_frequencies
+#         start_imag = (num_sources + source_idx) * num_frequencies
+#         groups[start_real : start_real + num_frequencies] = source_idx
+#         groups[start_imag : start_imag + num_frequencies] = source_idx
 
-    return groups
+#     return groups
 
 
 def complex_block_to_augmented_real(
@@ -126,85 +130,28 @@ def augmented_real_to_complex_block(
     return X_complex
 
 
-def block_mixing_matrix_to_augmented_real(
-    A_complex: np.ndarray, num_mics: int, num_sources: int, num_frequencies: int
-) -> np.ndarray:
-    """
-    Convert complex block mixing matrix to augmented real form.
+# def block_mixing_matrix_to_augmented_real(
+#     A_block: np.ndarray, num_mics: int, num_sources: int, num_frequencies: int
+# ) -> np.ndarray:
+#     """
+#     Convert complex block mixing matrix to augmented real form.
 
-    Args:
-        A_complex: Complex block matrix (P*F, N*F)
-        num_mics: Number of microphones (P)
-        num_sources: Number of sources (N)
-        num_frequencies: Number of frequencies (F)
+#     Args:
+#         A_block: Complex block matrix (P*F, N*F)
+#         num_mics: Number of microphones (P)
+#         num_sources: Number of sources (N)
+#         num_frequencies: Number of frequencies (F)
 
-    Returns:
-        A_R: Augmented real matrix (2*P*F, 2*N*F)
-    """
-    A_real = A_complex.real
-    A_imag = A_complex.imag
+#     Returns:
+#         A_R: Augmented real matrix (2*P*F, 2*N*F)
+#     """
+#     A_real = A_block.real
+#     A_imag = A_block.imag
 
-    # Build augmented real form: [Re(A), -Im(A); Im(A), Re(A)]
-    A_R = np.block([[A_real, -A_imag], [A_imag, A_real]])
+#     # Build augmented real form: [Re(A), -Im(A); Im(A), Re(A)]
+#     A_R = np.block([[A_real, -A_imag], [A_imag, A_real]])
 
-    return A_R
-
-
-def frequency_group_lasso(
-    Y_complex: np.ndarray,
-    A_complex: np.ndarray,
-    num_mics: int,
-    num_sources: int,
-    num_frequencies: int,
-    alpha: float = 1.0,
-    fit_intercept: bool = False,
-) -> np.ndarray:
-    """
-    Solve group LASSO problem with frequency grouping.
-
-    Minimizes: 0.5 * ||Y - A*X||_2^2 + alpha * sum_j ||X_j||_2
-
-    where X_j contains all frequencies (real and imaginary) for source j.
-
-    Args:
-        Y_complex: Complex measurements (P*F, 1)
-        A_complex: Complex block mixing matrix (P*F, N*F)
-        num_mics: Number of microphones (P)
-        num_sources: Number of sources (N)
-        num_frequencies: Number of frequencies (F)
-        alpha: Regularization parameter
-        fit_intercept: Whether to fit an intercept term
-
-    Returns:
-        X_opt: Optimized complex block vector (N*F, 1)
-    """
-    # Convert to augmented real form
-    Y_R = np.concatenate([Y_complex.real, Y_complex.imag], axis=0)
-    A_R = block_mixing_matrix_to_augmented_real(
-        A_complex, num_mics, num_sources, num_frequencies
-    )
-
-    # Create groups: each source (direction) is one group
-    groups = create_frequency_groups(num_sources, num_frequencies)
-
-    # Solve group LASSO
-    model = GroupLasso(
-        groups=groups,
-        group_reg=alpha,
-        l1_reg=0.0,  # Pure group LASSO, no additional L1
-        fit_intercept=fit_intercept,
-        scale_reg="group_size",  # Scale by sqrt(group_size) as is standard
-        supress_warning=True,
-        n_iter=100000,
-    )
-
-    model.fit(A_R, Y_R.ravel())
-    X_R_opt = model.coef_.reshape(-1, 1)
-
-    # Convert back to complex form
-    X_opt = augmented_real_to_complex_block(X_R_opt, num_sources, num_frequencies)
-
-    return X_opt
+#     return A_R
 
 
 def tensor_to_block_matrix(A: np.ndarray) -> np.ndarray:
@@ -242,33 +189,32 @@ def matrix_to_block_vector(X: np.ndarray) -> np.ndarray:
     return X_block
 
 
-def color_groups(X: np.ndarray):
+def color_groups(
+    groups: np.ndarray, num_sources: int, num_frequencies: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Interprets the block vector of X and returns a vector of same shape with a distinct complex number in all entries of each group.
 
     Args:
-        X: complex matrix of shape (N, F)
-
+        groups: array of group indices for each element in X
     Returns:
         group_matrix: A matrix of shape (N, F) where each group has a distinct complex number.
         group_block_vector: A block vector of shape (N*F, 1) where each group has a distinct complex number.
         group_augmented_real: A matrix of shape (2*N*F, 1) where each group has a distinct complex number.
     """
-    num_sources, num_frequencies = X.shape
-    groups = create_frequency_groups(num_sources, num_frequencies)
     # create a mapping as groups, but to a distinct complex color for each group. There are num_sources groups.
-    group_color = {i: np.exp(2j * np.pi * i / num_sources) for i in range(num_sources)}
+    group_color = {
+        i: np.exp(2j * np.pi * (i + 1) / (2 * num_sources)) for i in range(num_sources)
+    }
 
-    X_block = matrix_to_block_vector(X)
-    X_R = complex_block_to_augmented_real(X_block, num_sources, num_frequencies)
-    group_matrix = np.zeros_like(X, dtype=complex)
-    group_block_vector = np.zeros_like(X_block, dtype=complex)
-    group_augmented = np.zeros_like(X_R, dtype=complex)
+    group_matrix = np.zeros((num_sources, num_frequencies), dtype=complex)
+    group_block_vector = np.zeros((num_sources * num_frequencies, 1), dtype=complex)
+    group_augmented = np.zeros((2 * num_sources * num_frequencies, 1), dtype=complex)
 
     # group_block_vector[i] = groups[i]
     for r in range(2):
-        for n in range(X.shape[0]):
-            for f in range(X.shape[1]):
+        for n in range(num_sources):
+            for f in range(num_frequencies):
                 group_idx = r * num_sources * num_frequencies + n * num_frequencies + f
                 idx = group_idx
                 if r == 0:
@@ -344,6 +290,91 @@ def block_vector_to_matrix(
     return X_complex
 
 
+# def frequency_group_lasso_solution(
+#     Y_complex: np.ndarray,
+#     A_complex: np.ndarray,
+#     alpha: float = 1e-4,
+#     n_iter: int = 100000,
+#     fit_intercept: bool = False,
+# ) -> np.ndarray:
+#     """
+#     Solve group LASSO problem with frequency grouping.
+
+#     Minimizes: 0.5 * ||Y - A*X||_2^2 + alpha * sum_j ||X_j||_2
+
+#     where X_j contains all frequencies (real and imaginary) for source j.
+
+#     Args:
+#         Y_complex: Complex measurements (P*F, 1)
+#         A_complex: Complex block mixing matrix (P*F, N*F)
+#         num_mics: Number of microphones (P)
+#         num_sources: Number of sources (N)
+#         num_frequencies: Number of frequencies (F)
+#         alpha: Regularization parameter
+#         fit_intercept: Whether to fit an intercept term
+
+#     Returns:
+#         X_opt: Optimized complex block vector (N*F, 1)
+#     """
+#     # Convert to block structure
+#     num_mics, num_sources, num_frequencies = A_complex.shape
+#     A_block = tensor_to_block_matrix(A_complex)
+#     Y_block = matrix_to_block_vector(Y_complex)
+
+#     # Convert to augmented real form
+#     Y_R = np.concatenate([Y_block.real, Y_block.imag], axis=0)
+#     A_R = block_mixing_matrix_to_augmented_real(
+#         A_block, num_mics, num_sources, num_frequencies
+#     )
+
+#     # Create groups: each source (direction) is one group
+#     groups = create_frequency_groups(num_sources, num_frequencies)
+
+#     group_reg = num_mics * alpha
+
+#     # Solve group LASSO
+#     model = GroupLasso(
+#         groups=groups,
+#         group_reg=group_reg,
+#         # l1_reg=0.0,  # Pure group LASSO, no additional L1
+#         # fit_intercept=fit_intercept,
+#         # scale_reg="group_size",  # Scale by sqrt(group_size) as is standard
+#         supress_warning=True,
+#         n_iter=n_iter,
+#     )
+
+#     model.fit(A_R, Y_R.ravel())
+#     X_R_opt = model.coef_.reshape(-1, 1)
+
+#     # Convert back to complex form
+#     X_opt = augmented_real_to_complex_block(X_R_opt, num_sources, num_frequencies)
+
+#     return X_opt
+
+
+def moe_group_lasso_solution(Y_matrix, A_tensor, alpha=1e-4, max_iter=20000):
+    num_mics, num_sources, num_frequencies = A_tensor.shape
+    A = tensor_to_block_matrix(A_tensor)
+    Y = matrix_to_block_vector(Y_matrix)
+    groups = np.concatenate([[i] * num_frequencies for i in range(num_sources)])
+    groups = np.concatenate([groups, groups])  # for real and imaginary parts
+    group_reg = num_mics * num_frequencies * alpha  # samples are mics x frequencies
+
+    model = GroupLasso(
+        groups=groups, group_reg=group_reg, n_iter=max_iter, supress_warning=True
+    )
+    X_freq = block_vector_to_matrix(
+        from_real_augmented(
+            model.fit(to_real_augmented(A), to_real_augmented(Y)).coef_.reshape(-1, 1)
+        ),
+        num_sources,
+        num_frequencies,
+    )
+    return X_freq
+
+
+##################################################################
+
 if __name__ == "__main__":
     # Example usage
     import sys
@@ -389,8 +420,8 @@ if __name__ == "__main__":
 
     X_true = matrix_to_block_vector(sim.X)
 
-    X_gl = frequency_group_lasso(
-        Y_complex=Y_block,
+    X_gl = frequency_group_lasso_solution(
+        Y_matrix=Y_block,
         A_complex=A_block,
         num_mics=P,
         num_sources=N,

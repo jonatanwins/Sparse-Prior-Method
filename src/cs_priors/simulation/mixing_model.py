@@ -108,12 +108,14 @@ def run_simulation(
     amplitude_step=0,
     phase_step=0.3,
     angle_base=np.pi / 4,
-    angle_step=0.3,
+    angle_step=None,
     sampling_rate_factor=10,
     simulation_duration=None,
     walls=[],
     seed=None,
 ):
+    if angle_step is None:
+        angle_step = 2 * np.pi / num_sources
 
     # 1. Initialize microphone array.
     if array_type.lower() == "linear":

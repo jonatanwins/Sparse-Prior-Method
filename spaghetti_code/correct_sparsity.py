@@ -7,6 +7,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cs_priors.plotting.plot_complex import plot_matrices
 from cs_priors.plotting.plotting import plot_equation, wrapper_plot_geometry
+from cs_priors.solvers.moe_group_lasso import (
+    tensor_to_block_matrix,
+    matrix_to_block_vector,
+)
 
 
 # Add the src directory to the Python path
@@ -88,6 +92,8 @@ def tensor_wrong_detected_sources(
     sparsities: list[int],
     seeds: int = 10,
     debug: bool = False,
+    frequency_idx: int | None = 1,
+    freq_interval: tuple[int, int] | None = None,
 ) -> dict:
     """
     Computes the number of wrongly detected sources for a method and the pseudoinverse across different numbers of microphones, sources, and sparsity levels.
@@ -101,30 +107,72 @@ def tensor_wrong_detected_sources(
             for sparsity in sparsities:
                 wrong_counts = []
                 for seed in range(seeds):
-                    sim = run_simulation(
-                        num_mics=mic,
-                        num_sources=source,
-                        s_sparse=sparsity,
-                        seed=seed,
-                        angle_step=2 * np.pi / source,
-                    )
-                    Y = sim.Y[:, 1]
-                    A = sim.C[:, :, 1]
-                    X0 = np.linalg.pinv(A) @ Y
-                    X_TRUE = sim.X[:, 1]
-                    if (
-                        debug
-                        and seed == 0
-                        and mic == microphones[0]
-                        and source == sources[0]
-                        and sparsity == sparsities[0]
-                    ):
-                        wrapper_plot_geometry(sim, skip_labels=True)
+
+                    # 1. Block structure using all frequencies
+                    if freq_interval is not None:
+                        all_frequencies = []
+                        np.random.seed(seed)  # Set seed for reproducibility
+                        for _ in range(source):
+                            count = np.random.randint(1, 10)
+                            frequencies = []
+                            for _ in range(count):
+                                frequencies.append(
+                                    np.random.randint(
+                                        freq_interval[0], freq_interval[1]
+                                    )
+                                )
+                            all_frequencies.append(frequencies)
+                        sim = run_simulation(
+                            num_mics=mic,
+                            num_sources=source,
+                            s_sparse=sparsity,
+                            seed=seed,
+                            frequencies=all_frequencies,
+                            angle_step=2 * np.pi / source,
+                        )
+                        Y = matrix_to_block_vector(sim.Y)
+                        A = tensor_to_block_matrix(sim.C)
+                        X0 = np.linalg.pinv(A) @ Y
+                        X_TRUE = matrix_to_block_vector(sim.X)
+
+                    # 2. Single frequency index
+                    elif frequency_idx is not None:
+                        sim = run_simulation(
+                            num_mics=mic,
+                            num_sources=source,
+                            s_sparse=sparsity,
+                            seed=seed,
+                            angle_step=2 * np.pi / source,
+                        )
+                        Y = sim.Y[:, frequency_idx]
+                        A = sim.C[:, :, frequency_idx]
+                        X0 = np.linalg.pinv(A) @ Y
+                        X_TRUE = sim.X[:, frequency_idx]
+
+                    # 3. Error if neither frequency_idx nor freq_interval is provided
+                    else:
+                        raise ValueError(
+                            "Either frequency_idx or freq_interval must be provided"
+                        )
+
+                    # 4. Compute the single wrong count
                     tol = noise_threshold(X0, tolerance_factor=0.1)
                     X_method1 = method1(Y=Y, A=A)
                     wrong_X0 = len(wrong_predictions(X_TRUE, X0, tol))
                     wrong1 = len(wrong_predictions(X_TRUE, X_method1, tol))
+                    wrong_counts.append((wrong_X0, wrong1))
+
+                    # 5. Debugging
                     if debug:
+                        # Plot geometry once
+                        if (
+                            seed == 0
+                            and mic == microphones[0]
+                            and source == sources[0]
+                            and sparsity == sparsities[0]
+                        ):
+                            wrapper_plot_geometry(sim, skip_labels=True)
+
                         # when the method is significantly worse than the pseudoinverse, plot the wrong predictions
                         if wrong1 > 1.1 * wrong_X0 + 2:
                             # which indices are wrong
@@ -154,13 +202,12 @@ def tensor_wrong_detected_sources(
                                 polar=True,
                                 font_size=10,
                             )
-                    wrong_counts.append((wrong_X0, wrong1))
                 avg_wrong_X0 = np.mean([wc[0] for wc in wrong_counts])
                 avg_wrong1 = np.mean([wc[1] for wc in wrong_counts])
-                results[(mic, source, sparsity)] = (
-                    avg_wrong_X0,
-                    avg_wrong1,
-                )
+                # results[(mic, source, sparsity)] = (
+                #     avg_wrong_X0,
+                #     avg_wrong1,
+                # )
                 results[(mic, source, sparsity)] = {
                     "avg_wrong_X0": avg_wrong_X0,
                     name: avg_wrong1,
@@ -176,6 +223,10 @@ def heatmap_average_wrong_sources(
     sparsity_range,
     seeds=10,
     debug=False,
+    vmin=None,
+    vmax=None,
+    frequency_idx: int | None = 1,
+    freq_interval: tuple[int, int] | None = None,
 ):
     results = tensor_wrong_detected_sources(
         method1=method1,
@@ -185,6 +236,8 @@ def heatmap_average_wrong_sources(
         sparsities=sparsity_range,
         seeds=seeds,
         debug=debug,
+        frequency_idx=frequency_idx,
+        freq_interval=freq_interval,
     )
 
     # If sources is fixed (length 1), create heatmap: mics vs sparsity
@@ -203,6 +256,8 @@ def heatmap_average_wrong_sources(
             annot=True,
             fmt=".2f",
             cmap="viridis",
+            vmin=vmin,
+            vmax=vmax,
         )
         plt.xlabel("Sparsity")
         plt.ylabel("Number of Microphones")
@@ -224,6 +279,8 @@ def heatmap_average_wrong_sources(
                 annot=True,
                 fmt=".2f",
                 cmap="viridis",
+                vmin=vmin,
+                vmax=vmax,
             )
             plt.xlabel("Number of Sources")
             plt.ylabel("Number of Microphones")
