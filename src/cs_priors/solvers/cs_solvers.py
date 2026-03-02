@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.linear_model import Lasso, MultiTaskLasso
-from cs_priors.main import run_simulation
+from unused.main import run_simulation
 from cs_priors.plotting.plotting import plot_geometry_auto, plot_overview, plot_equation, plot_matrix_3D
 from numpy.linalg import pinv
 
@@ -13,14 +13,14 @@ def pred_lasso(sim, alpha=1, plot=False):
     M = len(sim.X)
 
     for f in range(len(sim.freqs)):
-        C_block_f = np.block(
+        A_block_f = np.block(
             [
-                [sim.C[:, :, f].real, -sim.C[:, :, f].imag],
-                [sim.C[:, :, f].imag, sim.C[:, :, f].real],
+                [sim.A[:, :, f].real, -sim.A[:, :, f].imag],
+                [sim.A[:, :, f].imag, sim.A[:, :, f].real],
             ]
         )
         lasso.fit(
-            C_block_f, Y_block[:, f]
+            A_block_f, Y_block[:, f]
         )  # TODO Here coordinate descent is being used.
         X_block_f = lasso.coef_.T  # shape (2M × K)
         X_block[:, f] = X_block_f[:]
@@ -29,9 +29,9 @@ def pred_lasso(sim, alpha=1, plot=False):
     if plot:
         plot_equation(
             Y_block[:, 1],
-            C_block_f,
+            A_block_f,
             X_block_f,
-            titles=(f'Y_block[:,{1}]', f'C_block_f={1}', f'X_block_f={1}, {M=}'),
+            titles=(f'Y_block[:,{1}]', f'A_block_f={1}', f'X_block_f={1}, {M=}'),
             ratios=(1, 10, 1),
         )
         plot_equation(
@@ -78,7 +78,7 @@ def diy_omp(A, y, max_iterations=100, tol=1e-3):
 def multi_omp(sim):  # Can be modified to multi_function for any method
     X_omp = np.zeros((len(sim.sources), sim.N))
     for f in range(sim.N):  # for each frequency, N = len(freqs)
-        X_omp[:, f] = diy_omp(sim.C[:, :, f], sim.Y[:, f])
+        X_omp[:, f] = diy_omp(sim.A[:, :, f], sim.Y[:, f])
 
     return X_omp
 

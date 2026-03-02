@@ -82,7 +82,7 @@ def just_YAX_from_simulation(  # moved to mixing_model.py
         phase_step=phase_step,
     )
     Y = sim.Y[:, freq_index]  # Measurements
-    A = sim.C[:, :, freq_index]  # Mixing matrix
+    A = sim.A[:, :, freq_index]  # Mixing matrix
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
     X_TRUE = sim.X[:, freq_index]  # True source signals
     return Y, A, X0, X_TRUE
@@ -162,7 +162,7 @@ def run_comparison_sparsity(
                 )
                 freq_index = 1
                 Y = sim.Y[:, freq_index]  # Measurements
-                A = sim.C[:, :, freq_index]  # Mixing matrix
+                A = sim.A[:, :, freq_index]  # Mixing matrix
                 X0 = np.linalg.pinv(A) @ Y  # initial guess for X
                 X_TRUE = sim.X[:, freq_index]  # True source signals
 
@@ -435,7 +435,7 @@ def tensor_correctly_detected_sources(
                     )
                     freq_index = 1
                     Y = sim.Y[:, freq_index]  # Measurements
-                    A = sim.C[:, :, freq_index]  # Mixing matrix
+                    A = sim.A[:, :, freq_index]  # Mixing matrix
                     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
                     X_TRUE = sim.X[:, freq_index]  # True source signals
 
@@ -485,7 +485,7 @@ if __name__ == "__main__":
 
     freq_index = 1
     Y = sim.Y[:, freq_index].reshape(-1, 1)  # Measurements
-    A = sim.C[:, :, freq_index]  # Mixing matrix
+    A = sim.A[:, :, freq_index]  # Mixing matrix
     X0 = (np.linalg.pinv(A) @ Y).reshape(-1, 1)  # initial guess for X
     X_TRUE = sim.X[:, freq_index].reshape(-1, 1)  # True source signals
 

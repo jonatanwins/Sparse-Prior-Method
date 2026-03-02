@@ -800,21 +800,21 @@ def plot_two_line_equation(
     plt.show()
 
 
-def plot_C_pinv(C, selected_frequency):
-    C_f0 = C[:, :, selected_frequency]
-    C_pinv = np.linalg.pinv(C_f0)
-    id_f0 = C_pinv @ C_f0
+def plot_A_pinv(A, selected_frequency):
+    A_f0 = A[:, :, selected_frequency]
+    A_pinv = np.linalg.pinv(A_f0)
+    id_f0 = A_pinv @ A_f0
 
     plot_equation(
         id_f0,
-        C_f0,
-        C_pinv,
+        A_f0,
+        A_pinv,
         titles=(
-            rf"$C_{{{selected_frequency}}}^{{\dagger}} \cdot C_{{{selected_frequency}}} \approx I$",
-            rf"$C_{{{selected_frequency}}}$ ",
-            rf"$C_{{{selected_frequency}}}^{{\dagger}}$",
+            rf"$A_{{{selected_frequency}}}^{{\dagger}} \cdot A_{{{selected_frequency}}} \approx I$",
+            rf"$A_{{{selected_frequency}}}$ ",
+            rf"$A_{{{selected_frequency}}}^{{\dagger}}$",
         ),
-        ratios=(id_f0.shape[1], C_f0.shape[1], C_pinv.shape[1]),
+        ratios=(id_f0.shape[1], A_f0.shape[1], A_pinv.shape[1]),
         polar="absolute",
     )
 

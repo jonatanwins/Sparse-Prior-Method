@@ -8,7 +8,7 @@ from scipy.fft import fft, fftfreq, fftshift, ifft, rfftfreq
 
 from cs_priors.simulation.dft import DFT, DFT_matrix
 from cs_priors.plotting.plotting import (
-    plot_C_pinv,
+    plot_A_pinv,
     plot_complex_matrix,
     plot_equation,
     plot_matrix_3D,
@@ -267,27 +267,27 @@ def run_simulation(
     X = fft(x_time, axis=1)
     freqs = fftfreq(N, d=1 / sampling_rate)
 
-    # Build the mixing matrix C: dimensions [num_mics x num_sources x N].
-    C = np.zeros((num_mics, len(sources), N), dtype=complex)
+    # Build the mixing matrix A: dimensions [num_mics x num_sources x N].
+    A = np.zeros((num_mics, len(sources), N), dtype=complex)
     for i in range(num_mics):
         for j, src in enumerate(sources):
-            C[i, j, :] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
+            A[i, j, :] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
 
     # Predicted observations in the frequency domain.
     Y_pred = np.zeros((num_mics, N), dtype=complex)
     for idf in range(N):
-        Y_pred[:, idf] = C[:, :, idf] @ X[:, idf]
+        Y_pred[:, idf] = A[:, :, idf] @ X[:, idf]
 
     # Reconstruct the source spectrum.
     Y_fft = fft(y_time, axis=1)
     num_sources = len(sources)
     X_pred = np.zeros((num_sources, N), dtype=complex)
-    C_pinv = np.zeros((num_sources, num_mics, N), dtype=complex)
+    A_pinv = np.zeros((num_sources, num_mics, N), dtype=complex)
     for idf in range(N):
-        C_f = C[:, :, idf]
-        C_f_pinv = np.linalg.pinv(C_f)
-        C_pinv[:, :, idf] = C_f_pinv
-        X_pred[:, idf] = C_f_pinv @ Y_fft[:, idf]
+        A_f = A[:, :, idf]
+        A_f_pinv = np.linalg.pinv(A_f)
+        A_pinv[:, :, idf] = A_f_pinv
+        X_pred[:, idf] = A_f_pinv @ Y_fft[:, idf]
 
     # Inverse FFT to recover time-domain source signals.
     x_pred = ifft(X_pred, axis=1)
@@ -302,8 +302,8 @@ def run_simulation(
         X=X,
         Y=Y_fft,
         freqs=freqs,
-        C=C,
-        C_pinv=C_pinv,
+        A=A,
+        A_pinv=A_pinv,
         Y_pred=Y_pred,
         X_pred=X_pred,
         x_pred=x_pred,
@@ -378,23 +378,23 @@ def experiment_7(plot=False):
     X = fft(x, axis=1)
     freqs = fftfreq(N, d=1 / sampling_rate)
     # f0 is constant
-    C = np.zeros((num_mics, num_sources, N), dtype=complex)
+    A = np.zeros((num_mics, num_sources, N), dtype=complex)
 
-    # C for every frequency
+    # A for every frequency
     for i in range(num_mics):
         for j, source in enumerate(sources):
-            C[i, j] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
+            A[i, j] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
 
     Y_pred = np.zeros((num_mics, N), dtype=complex)
     for idf in range(N):
-        Y_pred[:, idf] = C[:, :, idf] @ X[:, idf]
+        Y_pred[:, idf] = A[:, :, idf] @ X[:, idf]
 
     # Recreating X
     Y = fft(y)
     X_pred = np.zeros((num_sources, N), dtype=complex)
     for idf in range(N):
-        C_f_pinv = np.linalg.pinv(C[:, :, idf])
-        X_pred[:, idf] = C_f_pinv @ Y[:, idf]
+        A_f_pinv = np.linalg.pinv(A[:, :, idf])
+        X_pred[:, idf] = A_f_pinv @ Y[:, idf]
 
     # 3. PLOTTING
 
@@ -410,8 +410,8 @@ def experiment_7(plot=False):
                 X=X,
                 Y=Y_fft,
                 freqs=freqs,
-                C=C,
-                C_pinv=C_pinv,
+                A=A,
+                A_pinv=A_pinv,
                 Y_pred=Y_pred,
                 X_pred=X_pred,
                 x_pred=x_pred,
@@ -424,7 +424,7 @@ def experiment_7(plot=False):
                 active_indices=active_indices,
             )
         )
-        plot_equation(Y[:, 1], C[:, :, 1], X[:, 1], ratios=(1, 8, 1), font_size=12)
+        plot_equation(Y[:, 1], A[:, :, 1], X[:, 1], ratios=(1, 8, 1), font_size=12)
 
         # Reconstructing X
         plot_equation(
@@ -434,7 +434,7 @@ def experiment_7(plot=False):
         # plot_signals_side_by_side(t, ifft(X_pred), x, sources, labels=("x_pred", "x"))
 
         selected_frequency = 1
-        plot_C_pinv(C, selected_frequency)
+        plot_A_pinv(A, selected_frequency)
 
 
 def experiment_8():

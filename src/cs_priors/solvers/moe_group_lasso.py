@@ -409,9 +409,9 @@ if __name__ == "__main__":
         show_values=True,
     )
 
-    A_block = tensor_to_block_matrix(sim.C)
+    A_block = tensor_to_block_matrix(sim.A)
 
-    P, N, F = sim.C.shape
+    P, N, F = sim.A.shape
 
     A_R = block_mixing_matrix_to_augmented_real(A_block, P, N, F)
     Y_block = matrix_to_block_vector(sim.Y)

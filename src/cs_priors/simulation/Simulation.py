@@ -13,8 +13,8 @@ class Simulation:
     X: np.ndarray
     Y: np.ndarray
     freqs: np.ndarray
-    C: np.ndarray
-    C_pinv: np.ndarray
+    A: np.ndarray
+    A_pinv: np.ndarray
     Y_pred: np.ndarray
     X_pred: np.ndarray
     x_pred: np.ndarray

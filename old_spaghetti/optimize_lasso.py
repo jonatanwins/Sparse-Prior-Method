@@ -50,7 +50,7 @@ def tensor_lasso_runs(
                 )
                 freq_index = 1
                 Y = sim.Y[:, freq_index]  # Measurements
-                A = sim.C[:, :, freq_index]  # Mixing matrix
+                A = sim.A[:, :, freq_index]  # Mixing matrix
                 X0 = np.linalg.pinv(A) @ Y  # initial guess for X
 
                 if noise_level is not None:

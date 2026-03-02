@@ -162,14 +162,14 @@ def _compute_single_config(
         num_sources_local, num_frequencies = sim.X.shape
 
         # Compute baseline (pseudoinverse)
-        A_block = tensor_to_block_matrix(sim.C)
+        A_block = tensor_to_block_matrix(sim.A)
         Y_block = matrix_to_block_vector(sim.Y)
         X0_matrix = block_vector_to_matrix(
             np.linalg.pinv(A_block) @ Y_block, sources, num_frequencies
         )
 
         # Compute method estimate
-        X_method = method(Y_matrix=sim.Y, A_tensor=sim.C)
+        X_method = method(Y_matrix=sim.Y, A_tensor=sim.A)
 
         # Evaluate performance
         tol = noise_threshold(X0_matrix, tolerance_factor=0.1)

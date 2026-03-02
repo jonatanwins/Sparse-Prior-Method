@@ -131,7 +131,7 @@ def tensor_wrong_detected_sources(
                             angle_step=2 * np.pi / source,
                         )
                         Y = matrix_to_block_vector(sim.Y)
-                        A = tensor_to_block_matrix(sim.C)
+                        A = tensor_to_block_matrix(sim.A)
                         X0 = np.linalg.pinv(A) @ Y
                         X_TRUE = matrix_to_block_vector(sim.X)
 
@@ -145,7 +145,7 @@ def tensor_wrong_detected_sources(
                             angle_step=2 * np.pi / source,
                         )
                         Y = sim.Y[:, frequency_idx]
-                        A = sim.C[:, :, frequency_idx]
+                        A = sim.A[:, :, frequency_idx]
                         X0 = np.linalg.pinv(A) @ Y
                         X_TRUE = sim.X[:, frequency_idx]
 
@@ -296,7 +296,7 @@ if __name__ == "__main__":
 
     sim = run_simulation(num_sources=10, num_mics=5, s_sparse=3)
     Y = sim.Y[:, 1]
-    A = sim.C[:, :, 1]
+    A = sim.A[:, :, 1]
     X0 = np.linalg.pinv(A) @ Y
     X_TRUE = sim.X[:, 1]
 

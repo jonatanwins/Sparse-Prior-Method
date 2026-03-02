@@ -2,7 +2,7 @@ import numpy as np
 import random
 from scipy.fft import fft, ifft, fftfreq
 from ..geometry.arrays import circular_array, linear_array
-from ..geometry.SoundSource import SoundSource
+from ..geometry.sources import SoundSource
 from ..constants import SPEED_OF_SOUND
 from .Simulation import Simulation
 
@@ -74,107 +74,25 @@ def waveforms_at_mics(mics, sources, sampling_rate, duration=None):
     return t, composite_waveforms, individual_waveforms, delays_dict
 
 
-# def s_sparse_sources(s, sources, seed=None):
-#     sparse_sources = [
-#         SoundSource(
-#             distance=src.distance,
-#             angle=src.angle,
-#             frequency=src.frequency,
-#             amplitude=0,
-#             phase=src.phase,
-#             function=src.function,
-#         )
-#         for src in sources
-#     ]
-#     if seed is not None:
-#         np.random.seed(seed)
-#         random.seed(seed)
-#     indicies = random.sample(range(len(sources)), s)
-#     for i in indicies:
-#         sparse_sources[i] = sources[i]
-#     return sparse_sources, indicies
-
-
-def construct_geometry(
-    num_mics: int,
-    array_type: str,
-    mic_spacing: float,
-    num_sources: int,
-    source_distance: float,
-    angle_base: float,
-    angle_step: float,
-):
-    # Microphones
-    if array_type.lower() == "linear":
-        mics = linear_array(num_mics, mic_spacing)
-    elif array_type.lower() == "circular":
-        mics = circular_array(num_mics, mic_spacing)
-    else:
-        raise ValueError("array_type must be 'linear' or 'circular'")
-
-    # Sources
-    if (
-        angle_step is not None
-        and angle_base is not None
-        and source_distance is not None
-    ):
-        sources = [
-            SoundSource(
-                distance=source_distance,
-                angle=angle_base + angle_step * a,
-                time_series=None,  # Placeholder, will be generated later
-            )
-            for a in range(num_sources)
-        ]
-    else:
-        raise ValueError(
-            "angle_step, angle_base and source_distance must be defined to construct geometry"
+def s_sparse_sources(s, sources, seed=None):
+    sparse_sources = [
+        SoundSource(
+            distance=src.distance,
+            angle=src.angle,
+            frequency=src.frequency,
+            amplitude=0,
+            phase=src.phase,
+            function=src.function,
         )
-
-    return mics, sources
-
-def select_active_sources(sources, s_sparse, seed=None):
+        for src in sources
+    ]
     if seed is not None:
         np.random.seed(seed)
         random.seed(seed)
-    active_indices = random.sample(range(len(sources)), s_sparse)
-    return active_indices
-
-
-# frequencies = [[100, 200], [150, 250], ...]
-def generate_signals(
-    sources: np.ndarray,
-    frequencies: list[list[int]],
-    phases: list[float],
-    periodic_function,
-    time: float,
-    sampling_rate: int | None,
-    active_indices: list[int]
-):
-    if sampling_rate is None: #TODO move
-        f_min = min(min(freq_list) for freq_list in frequencies)
-        sampling_rate = 10 * f_min
-    t = np.linspace(0, time, int(sampling_rate * time), endpoint=False)
-
-    for idx, (src, freqs, phase) in enumerate(zip(sources, frequencies, phases)):
-        if idx in active_indices:
-            src.time_series = np.sum(
-                [periodic_function(2 * np.pi * freq * t + phase) for freq in freqs],
-                axis=0,  # otherwise we get a single scalar
-            )
-        else:
-            src.time_series = np.zeros_like(t)
-    
-    return sources
-
-def simulate_responses(mics: np.ndarray, sources: np.ndarray, sampling_rate: int, duration: float):
-    # generate x, y and delays matrix
-    x = [src.time_series for src in sources]
-
-    # compute the delays
-    for mic in mics:
-        
-
+    indicies = random.sample(range(len(sources)), s)
+    for i in indicies:
+        sparse_sources[i] = sources[i]
+    return sparse_sources, indicies
 
 
 def run_simulation(
@@ -325,6 +243,7 @@ def run_simulation(
     X_pred = np.zeros((num_sources, N), dtype=complex)
     A_pinv = np.zeros((num_sources, num_mics, N), dtype=complex)
     for idf in range(N):
+        # TODO Change this to C[f] = matrix for that frequency, i.e. block matrices
         A_f = A[:, :, idf]
         A_f_pinv = np.linalg.pinv(A_f)
         A_pinv[:, :, idf] = A_f_pinv
@@ -390,8 +309,3 @@ def just_YAX_from_simulation(
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
     X_TRUE = sim.X[:, freq_index]  # True source signals
     return Y, A, X0, X_TRUE
-
-
-if __name__ == "__main__":
-    # 1.
-    mics, sources = construct_geometry(3, "circular", 0.1, 10, 1, 1, 0.3)

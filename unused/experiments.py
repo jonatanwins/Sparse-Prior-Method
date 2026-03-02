@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, ifft
 
-from cs_priors.main import (
+from unused.main import (
     SoundSource,
     initialize_circular_array,
     initialize_linear_array,
@@ -10,7 +10,7 @@ from cs_priors.main import (
 )
 from cs_priors.simulation.dft import DFTfreq
 from cs_priors.plotting.plotting import (
-    plot_C_pinv,
+    plot_A_pinv,
     plot_complex_matrix,
     plot_equation,
     plot_overview,
@@ -408,7 +408,7 @@ def experiment_view_different_phases(plot=False):
             X_pred, X, np.array([[1]]), titles=("X_pred", "X", ""), ratios=(1, 1, 0)
         )
 
-        plot_C_pinv(C, selected_frequency)
+        plot_A_pinv(C, selected_frequency)
 
 
 if __name__ == "__main__":

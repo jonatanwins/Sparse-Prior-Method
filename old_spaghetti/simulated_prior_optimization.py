@@ -27,7 +27,7 @@ def simulate_mixing_model(
     sim = run_simulation(num_sources=num_sources, num_mics=num_mics, s_sparse=s_sparse)
     freq_index = 1
     Y = sim.Y[:, freq_index]  # Measurements
-    A = sim.C[:, :, freq_index]  # Mixing matrix
+    A = sim.A[:, :, freq_index]  # Mixing matrix
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
 
     # for plotting
@@ -189,7 +189,7 @@ def test_source_separation():
 
         freq_index = 1
         Y = sim.Y[:, freq_index]  # Measurements
-        A = sim.C[:, :, freq_index]  # Mixing matrix
+        A = sim.A[:, :, freq_index]  # Mixing matrix
         X0 = np.linalg.pinv(A) @ Y  # initial guess for X
         global X_true
         X_true = sim.X[:, freq_index]
@@ -257,7 +257,7 @@ def compare_to_LASSO():
 
     freq_index = 1
     Y = sim.Y[:, freq_index]  # Measurements
-    A = sim.C[:, :, freq_index]  # Mixing matrix
+    A = sim.A[:, :, freq_index]  # Mixing matrix
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
     X_true = sim.X[:, freq_index]
 
@@ -473,7 +473,7 @@ def plot_error_difference_heatmap_LASSO_simulated():
             )
             freq_index = 1
             Y = sim.Y[:, freq_index]  # Measurements
-            A = sim.C[:, :, freq_index]  # Mixing matrix
+            A = sim.A[:, :, freq_index]  # Mixing matrix
             X_true = sim.X[:, freq_index]
 
             # LASSO regression
@@ -780,7 +780,7 @@ def tensor_lasso_runs(num_mics=[8], num_sources=[10], sparsities=[2], alphas=[0.
                     )
                     freq_index = 1
                     Y = sim.Y[:, freq_index]  # Measurements
-                    A = sim.C[:, :, freq_index]  # Mixing matrix
+                    A = sim.A[:, :, freq_index]  # Mixing matrix
                     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
 
                     # LASSO regression
@@ -815,7 +815,7 @@ def tensor_sparse_prior_runs(num_mics=[8], sparsities=[2], num_sources=[10]):
                 )
                 freq_index = 1
                 Y = sim.Y[:, freq_index]  # Measurements
-                A = sim.C[:, :, freq_index]  # Mixing matrix
+                A = sim.A[:, :, freq_index]  # Mixing matrix
                 X_true = sim.X[:, freq_index]
 
                 # sparse prior optimization
@@ -933,7 +933,7 @@ def group_lasso():
     )
     freq_index = 1
     Y = sim.Y[:, freq_index]  # Measurements
-    A = sim.C[:, :, freq_index]  # Mixing matrix
+    A = sim.A[:, :, freq_index]  # Mixing matrix
     X0 = np.linalg.pinv(A) @ Y  # initial guess for X
     X_true = sim.X[:, freq_index]
 
