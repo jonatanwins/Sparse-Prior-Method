@@ -117,6 +117,7 @@ def plot_matrices(
     show_values=True,
     polar=True,
     font_size=8,
+    dpi=None,
 ):
     """
     Plot multiple complex matrices in an automatically arranged grid.
@@ -141,7 +142,7 @@ def plot_matrices(
         ncols = int(np.ceil(np.sqrt(num_matrices)))
         nrows = int(np.ceil(num_matrices / ncols))
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 5 * nrows))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 5 * nrows), dpi=dpi)
 
     # Flatten axes array for easier indexing
     if num_matrices == 1:

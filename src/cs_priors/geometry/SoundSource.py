@@ -37,6 +37,7 @@ class SoundSource:
     distance: float
     angle: float
     time_series: np.ndarray | None
+    label: str | None = None
 
     def get_position(self):
         x = self.distance * np.cos(self.angle)

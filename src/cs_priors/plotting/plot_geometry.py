@@ -1,39 +1,39 @@
-def plot_sources(ax, sources, show_frequency=True, source_color="dodgerblue"):
+from typeguard import typechecked
+import numpy as np
+
+
+@typechecked
+def plot_sources(ax, sources, source_color: str = "dodgerblue"):
     # Plot each source
     for idx, src in enumerate(sources):
         sx, sy = src.get_position()
         ax.scatter(
             sx,
             sy,
-            s=50,
+            s=40,
             marker="^",
             edgecolor="k",
             color=source_color,
             label="Sources" if idx == 0 else None,
         )
-        if show_frequency:
-
-            # Construct the annotation string with frequency and (if applicable) phase
-            label = f"{src.frequency:.0f} Hz" + (
-                f"\n{src.phase:.2f} rad" if src.phase != 0.0 else ""
-            )
-
+        if src.label is not None:
             # Annotate at the desired offset
             ax.text(
                 sx + 0.05,
                 sy + 0.05,
-                label,
-                fontsize=9,
+                src.label,
+                fontsize=8,
                 color=source_color,
             )
 
 
+@typechecked
 def plot_mics(ax, mics, mic_color="crimson"):
     # Plot microphones
     ax.scatter(
         mics[:, 0],
         mics[:, 1],
-        s=30,
+        s=20,
         marker="o",
         color=mic_color,
         edgecolor="k",
@@ -42,7 +42,7 @@ def plot_mics(ax, mics, mic_color="crimson"):
 
     # Annotate each microphone with its microphone number (starting from 0)
     for idx, (x, y) in enumerate(zip(mics[:, 0], mics[:, 1])):
-        ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=9, color=mic_color)
+        ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=8, color=mic_color)
 
 
 def plot_walls(ax, walls, wall_color="gray"):
@@ -51,22 +51,24 @@ def plot_walls(ax, walls, wall_color="gray"):
         ax.plot([wall.p1[0], wall.p2[0]], [wall.p1[1], wall.p2[1]], color=wall_color)
 
 
+@typechecked
 def plot_geometry_on_ax(
     ax,
-    mics,
+    mics: np.ndarray,
     sources,
-    walls=[],
-    show_frequency=True,
-    mic_color="crimson",
-    source_color="dodgerblue",
+    walls: list | None = None,
+    mic_color: str = "crimson",
+    source_color: str = "dodgerblue",
+    pad_factor: float = 0.3,
 ):
     """
     Plot microphones, sources, and origin on the given Axes object.
     """
 
     plot_mics(ax, mics, mic_color=mic_color)
-    plot_sources(ax, sources, show_frequency=show_frequency, source_color=source_color)
-    plot_walls(ax, walls, wall_color="gray")
+    plot_sources(ax, sources, source_color=source_color)
+    if walls is not None:
+        plot_walls(ax, walls, wall_color="gray")
 
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
@@ -94,12 +96,15 @@ def plot_geometry_on_ax(
     y_span = y_max - y_min
     max_span = max(x_span, y_span)
 
-    # Pad by 30%
-    pad_factor = 2
-
+    # Pad by pad_factor * 100%
     lower_bound = min(x_min, y_min) - pad_factor * max_span
     upper_bound = max(x_max, y_max) + pad_factor * max_span
     ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
+
+
+# ------ Functions related to walls ----------------------------------------
+# TODO: These are not in use yet (5.mar 2026)
+from ..geometry.walls import compute_reflections
 
 
 def plot_reflected_sources(ax, walls, sources, color="orange"):
@@ -136,23 +141,3 @@ def plot_intersections(ax, walls, mics, reflections):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import numpy as np
-
-    from ..simulation.mixing_model import run_simulation
-    from ..geometry.walls import Wall, compute_reflections, compute_path
-
-    sim = run_simulation(
-        num_sources=1,
-        num_mics=1,
-        walls=[
-            Wall(p1=np.array([-0.3, -0.5]), p2=np.array([-0.3, 1.7])),
-            Wall(p1=np.array([-0.3, 1.7]), p2=np.array([1.5, 1.7])),
-        ],
-        array_type="circular",
-    )
-
-    fig, ax = plt.subplots()
-    plot_geometry_on_ax(ax, sim.mics, sim.sources, walls=sim.walls)
-    reflections = plot_reflected_sources(ax, sim.walls, sim.sources)
-    print(reflections)
-    plot_intersections(ax, sim.walls, sim.mics, reflections)
-    plt.show()

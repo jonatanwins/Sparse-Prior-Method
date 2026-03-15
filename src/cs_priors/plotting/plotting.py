@@ -2,6 +2,7 @@ from itertools import cycle
 import matplotlib.pyplot as plt
 import numpy as np
 from ..plotting.plot_complex import *
+from scipy.fft import ifft
 
 
 colors = cycle(["#FFA343", "#FF1744", "#9A4DFF", "#00BFA5", "#3498DB"])
@@ -100,7 +101,7 @@ def plot_geometry_on_ax(
     x_positions,
     y_positions,
     sources,
-    show_frequency=True,
+    show_frequency=False,
     mic_color="crimson",
     source_color="dodgerblue",
     pad_factor=0.3,
@@ -446,23 +447,26 @@ def plot_overview(sim):
     # 2) Right column, row 0: Composite waveforms
     #    Highlight Mic #1 in black, others in light gray
     # -------------------------------------------------------------------------
-    num_mics = sim.composite_waveforms.shape[0]
+    y = ifft(sim.Y)
+    num_mics = len(sim.mics)
+    N = int(sim.sampling_rate * sim.duration)
+    t = np.linspace(0, sim.duration, N, endpoint=False)
 
     ax_composite = fig.add_subplot(gs[0, 1])
     # The rest in light gray
     for mic_idx in range(1, num_mics):
         ax_composite.plot(
-            sim.t,
-            sim.composite_waveforms[mic_idx],
+            t,
+            y[mic_idx],
             color="lightgray",
             # label=f"Mic {mic_idx}",
             # consider no label to avoid legend clutter
         )
 
     # First mic in black
-    ax_composite.plot(sim.t, sim.composite_waveforms[0], color="black", label="Mic 0")
+    ax_composite.plot(t, y[0], color="black", label="Mic 0")
     # Plot the measurement points
-    ax_composite.scatter(sim.t, sim.composite_waveforms[0], color="gold")
+    ax_composite.scatter(t, y[0], color="gold")
 
     ax_composite.set_title("Composite Waveforms (All Sources Summed)")
     ax_composite.set_xlabel("Time (s)")
@@ -481,9 +485,8 @@ def plot_overview(sim):
 
     # Enumerate each source's waveform dictionary entry:
     #   "Source 1" -> waveforms_for_mics, etc.
-    for i, (src_label, waveforms_for_mics) in enumerate(
-        sim.individual_waveforms.items(), start=1
-    ):
+    # BUG: I have changed this temporary to y, just to get it to work, will migrate away from this whole file anyway
+    for i in range(1, len(y)):
         ax_source = fig.add_subplot(gs[i, 1])
 
         # Pick a highlight color for this source
@@ -491,13 +494,11 @@ def plot_overview(sim):
 
         # Other mics in gray
         for mic_idx in range(1, num_mics):
-            ax_source.plot(sim.t, waveforms_for_mics[mic_idx], color="lightgray")
+            ax_source.plot(t, y[mic_idx], color="lightgray")
         # Mic #0 in highlight color
-        ax_source.plot(
-            sim.t, waveforms_for_mics[0], color=highlight_color, label="Mic 0"
-        )
+        ax_source.plot(t, y[0], color=highlight_color, label="Mic 0")
 
-        ax_source.set_title(f"Source {src_label} Waveforms")
+        ax_source.set_title(f"Source {i} Waveforms")
         ax_source.set_xlabel("Time (s)")
         ax_source.set_ylabel("Amplitude")
         ax_source.grid(True)

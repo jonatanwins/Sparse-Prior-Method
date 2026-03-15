@@ -1,98 +1,13 @@
 import numpy as np
 import random
-from scipy.fft import fft, ifft, fftfreq
-from ..geometry.arrays import circular_array, linear_array
+from scipy.fft import fft, fftfreq
+from ..geometry.arrays import circular_array, linear_array, arc_array
 from ..geometry.SoundSource import SoundSource
 from ..constants import SPEED_OF_SOUND
 from .Simulation import Simulation
 
 
-def calculate_delays(mics, source: SoundSource):
-    source_x, source_y = source.get_position()
-    distances = np.sqrt((mics[:, 0] - source_x) ** 2 + (mics[:, 1] - source_y) ** 2)
-    delays = distances / SPEED_OF_SOUND
-    return delays
-
-
-def single_waveform_at_all_mics(mics, src, t):
-    """
-    Compute the waveform at each microphone due to one sound source.
-
-    Returns:
-        waveforms: A 2D array (mic index x time samples) for the source.
-        delays: Delay for each microphone.
-    """
-
-    delays = calculate_delays(mics, src)
-
-    # at the microphone, hence the shift
-    # BUG SQUASH: the shift is negative as we are at an earlier stage of the signal
-
-    if isinstance(src.frequency, (list, np.ndarray)):
-        # Sum multiple frequency components
-        waveforms = np.zeros((len(mics), len(t)))
-        for freq in src.frequency:
-            waveforms += np.array(
-                [
-                    src.amplitude
-                    * src.function(2 * np.pi * freq * (t - delay) + src.phase)
-                    for delay in delays
-                ]
-            )
-    else:
-        waveforms = np.array(
-            [
-                src.amplitude
-                * src.function(2 * np.pi * src.frequency * (t - delay) + src.phase)
-                for delay in delays
-            ]
-        )
-
-    return waveforms, delays
-
-
-def waveforms_at_mics(mics, sources, sampling_rate, duration=None):
-    """
-    TODO
-    composite waveforms, uses same t for all
-    """
-    if duration is None:
-        min_freq = min(source.frequency for source in sources)
-        duration = 1 / min_freq
-
-    t = np.linspace(0, duration, int(sampling_rate * duration), endpoint=False)
-    composite_waveforms = np.zeros((len(mics), len(t)))
-    individual_waveforms = {}
-    delays_dict = {}
-
-    for idx, source in enumerate(sources):
-        waveform, delays = single_waveform_at_all_mics(mics, source, t)  # same t
-        composite_waveforms += waveform
-        individual_waveforms[idx] = waveform
-        delays_dict[idx] = delays
-
-    return t, composite_waveforms, individual_waveforms, delays_dict
-
-
-# def s_sparse_sources(s, sources, seed=None):
-#     sparse_sources = [
-#         SoundSource(
-#             distance=src.distance,
-#             angle=src.angle,
-#             frequency=src.frequency,
-#             amplitude=0,
-#             phase=src.phase,
-#             function=src.function,
-#         )
-#         for src in sources
-#     ]
-#     if seed is not None:
-#         np.random.seed(seed)
-#         random.seed(seed)
-#     indicies = random.sample(range(len(sources)), s)
-#     for i in indicies:
-#         sparse_sources[i] = sources[i]
-#     return sparse_sources, indicies
+# ── 1. Geometry ──────────────────────────────────────────────────────────────
 
 
 def construct_geometry(
@@ -104,294 +19,389 @@ def construct_geometry(
     angle_base: float,
     angle_step: float,
 ):
-    # Microphones
+    """Create mic array (M x 2) and source list (S,)."""
     if array_type.lower() == "linear":
         mics = linear_array(num_mics, mic_spacing)
     elif array_type.lower() == "circular":
         mics = circular_array(num_mics, mic_spacing)
+    elif array_type.lower() == "arc":
+        raise ValueError("Use arc_array() directly or quick_sector_sim() for arc mics.")
     else:
         raise ValueError("array_type must be 'linear' or 'circular'")
 
-    # Sources
-    if (
-        angle_step is not None
-        and angle_base is not None
-        and source_distance is not None
-    ):
-        sources = [
-            SoundSource(
-                distance=source_distance,
-                angle=angle_base + angle_step * a,
-                time_series=None,  # Placeholder, will be generated later
-            )
-            for a in range(num_sources)
-        ]
-    else:
-        raise ValueError(
-            "angle_step, angle_base and source_distance must be defined to construct geometry"
+    sources = [
+        SoundSource(
+            distance=source_distance,
+            angle=angle_base + angle_step * s,
+            time_series=None,
         )
-
+        for s in range(num_sources)
+    ]
     return mics, sources
 
-def select_active_sources(sources, s_sparse, seed=None):
+
+# ── 2. Select active (non-mute) sources ─────────────────────────────────────
+
+
+def select_active_sources(sources, num_active_sources, seed=None):
+    """Randomly pick the defined number of active source indices."""
     if seed is not None:
         np.random.seed(seed)
         random.seed(seed)
-    active_indices = random.sample(range(len(sources)), s_sparse)
-    return active_indices
+    return random.sample(range(len(sources)), num_active_sources)
 
 
-# frequencies = [[100, 200], [150, 250], ...]
+# ── 3. Generate time-domain signals ─────────────────────────────────────────
+
+
 def generate_signals(
-    sources: np.ndarray,
-    frequencies: list[list[int]],
-    phases: list[float],
-    periodic_function,
-    time: float,
-    sampling_rate: int | None,
-    active_indices: list[int]
+    sources: list[SoundSource],
+    active_indices: list[int],
+    sampling_rate: float,
+    duration: float,
+    mode: str = "sine",
+    frequencies: list[list[float]] | None = None,
+    phases: list[float] | None = None,
+    seed: int | None = None,
 ):
-    if sampling_rate is None: #TODO move
-        f_min = min(min(freq_list) for freq_list in frequencies)
-        sampling_rate = 10 * f_min
-    t = np.linspace(0, time, int(sampling_rate * time), endpoint=False)
+    """
+    Assign time_series to each source.  Muted sources get zeros.
 
-    for idx, (src, freqs, phase) in enumerate(zip(sources, frequencies, phases)):
-        if idx in active_indices:
+    Args:
+        mode: "sine" — sum-of-sines per source (requires frequencies, phases).
+              "noise" — white Gaussian noise.
+        frequencies: (S,) list of freq-lists, e.g. [[100, 200], [150]].
+        phases: (S,) list of starting phases.
+    """
+    N = int(sampling_rate * duration)
+    t = np.linspace(0, duration, N, endpoint=False)
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    for idx, src in enumerate(sources):
+        if idx not in active_indices:
+            src.time_series = np.zeros(N)
+            continue
+
+        if mode == "sine":
+            if frequencies is None or phases is None:
+                raise ValueError("sine mode requires frequencies and phases")
             src.time_series = np.sum(
-                [periodic_function(2 * np.pi * freq * t + phase) for freq in freqs],
-                axis=0,  # otherwise we get a single scalar
+                [np.sin(2 * np.pi * f * t + phases[idx]) for f in frequencies[idx]],
+                axis=0,
             )
+        elif mode == "noise":
+            src.time_series = np.random.randn(N)
         else:
-            src.time_series = np.zeros_like(t)
-    
-    return sources
+            raise ValueError(f"Unknown mode '{mode}'. Use 'sine' or 'noise'.")
 
-def simulate_responses(mics: np.ndarray, sources: np.ndarray, sampling_rate: int, duration: float):
-    # generate x, y and delays matrix
-    x = [src.time_series for src in sources]
-
-    # compute the delays
-    for mic in mics:
-        
+    return sources, t
 
 
+# ── 4. Delay matrix ─────────────────────────────────────────────────────────
 
-def run_simulation(
-    array_type="circular",
-    num_mics=5,
-    spacing=0.1,
-    num_sources=1,
-    s_sparse=None,
-    f0=100,
-    frequencies=None,
-    distance=1.5,
-    amplitude=2,
-    amplitude_step=0,
-    phase_step=0.3,
-    angle_base=np.pi / 4,
-    angle_step=None,
-    sampling_rate_factor=10,
-    simulation_duration=None,
-    walls=[],
-    seed=None,
-):
-    if angle_step is None:
-        angle_step = 2 * np.pi / num_sources
 
-    # 1. Initialize microphone array.
-    if array_type.lower() == "linear":
-        mics = linear_array(num_mics, spacing)
-    elif array_type.lower() == "circular":
-        mics = circular_array(num_mics, spacing)
-    else:
-        raise ValueError("array_type must be 'linear' or 'circular'")
+def compute_delay_matrix(mics: np.ndarray, sources: list[SoundSource]):
+    """
+    Returns:
+        delays: (M x S) propagation delay from each source to each mic.
+    """
+    src_pos = np.array([s.get_position() for s in sources])  # (S x 2)
+    # broadcasting: (M,1,2) - (1,S,2) -> (M,S)
+    # This is very efficient but pretty confusing.
+    # With np.newaxis we create an axis such that broadcasting can later
+    # interpret the subtraction as (M,S,2) - (M,S,2), but the data is
+    # not actually duplicated in memory.
+    # We can then compute the distances directly by taking the 2-norm
+    # over the last axis (the coordinates)
+    diff = mics[:, np.newaxis, :] - src_pos[np.newaxis, :, :]  # TODO
+    distances = np.linalg.norm(diff, axis=2)
+    return distances / SPEED_OF_SOUND
 
-    # 2. Create sound sources.
-    # Broadband sources, e.g. frequencies = [[100, 200], [150, 250], ...]
-    if frequencies is not None:
-        sources = [
-            SoundSource(
-                distance=distance,
-                angle=angle_base + angle_step * a,
-                frequency=frequencies[a],
-                amplitude=amplitude,
-                phase=phase_step * a,
-                function=np.sin,
-            )
-            for a in range(num_sources)
-        ]
-        # list of the form [[100, 150, 200], [300]] get the max frequency
-        f_min = min(min(freq_list) for freq_list in frequencies)
-        f_max = max(max(freq_list) for freq_list in frequencies)
-        simulation_duration = 1 / f_min
-        SAMPLING_RATE = sampling_rate_factor * f_max
 
-    # if there is only one frequency, all sources have the same frequency
-    elif isinstance(f0, (int, float)):
-        sources = [
-            SoundSource(
-                distance=distance,
-                angle=angle_base + angle_step * a,
-                frequency=f0,
-                amplitude=amplitude,
-                phase=phase_step * a,
-                function=np.sin,
-            )
-            for a in range(num_sources)
-        ]
-        simulation_duration = 1 / f0
-        SAMPLING_RATE = sampling_rate_factor * f0
+# ── 5. Mixing matrix A ──────────────────────────────────────────────────────
 
-    # Each source has its own frequency
-    elif isinstance(f0, (list, np.ndarray)):
-        if len(f0) != num_sources:
-            raise ValueError(
-                "If f0 is a list or array, its length must match num_sources"
-            )
-        sources = [
-            SoundSource(
-                distance=distance,
-                angle=angle_base + angle_step * a,
-                frequency=f0[a],
-                amplitude=amplitude + amplitude_step * a,
-                phase=phase_step * a,
-                function=np.sin,
-            )
-            for a in range(num_sources)
-        ]
-        f_min = min(f0)
-        f_max = max(f0)
-        simulation_duration = 1 / f_min
-        SAMPLING_RATE = sampling_rate_factor * f_max
-    else:
-        raise ValueError(
-            "f0 must be a number, list, or array or frequencies argument must be provided"
-        )
 
-    # Apply sparsity if specified.
-    if s_sparse is not None and s_sparse < num_sources:
-        sources, active_indices = s_sparse_sources(s_sparse, sources, seed=seed)
-    else:
-        active_indices = list(range(num_sources))
+def compute_mixing_matrix(delays: np.ndarray, freqs: np.ndarray):
+    """
+    Args:
+        delays: (M x S)
+        freqs:  (N,) frequency bins from fftfreq
 
-    # 3. Define sampling parameters.
-    N = int(SAMPLING_RATE * simulation_duration)
-
-    # 4. Simulate the waveforms at the microphones.
-    t, composite_waveforms, individual_waveforms, delays_dict = waveforms_at_mics(
-        mics, sources, SAMPLING_RATE, simulation_duration
+    Returns:
+        A: (M x S x N) complex mixing matrix, A[m,s,n] = exp(-i*2pi*f_n*tau_{ms})
+    """
+    # Combination of mics and sources for all frequencies
+    # (M, S, 1) * (1, 1, N) -> (M, S, N)
+    return np.exp(
+        -2j * np.pi * delays[:, :, np.newaxis] * freqs[np.newaxis, np.newaxis, :]
     )
 
-    # 5. TIME DOMAIN SIGNALS.
-    if frequencies is not None:
-        x_time = np.array(
-            [
-                sum(
-                    src.amplitude * src.function(2 * np.pi * freq * t + src.phase)
-                    for freq in src.frequency
-                )
-                for src in sources
-            ]
-        )
-    else:
-        # print("Assuming single frequency per source")
-        x_time = np.array(
-            [
-                src.amplitude * src.function(2 * np.pi * src.frequency * t + src.phase)
-                for src in sources
-            ]
-        )
-    y_time = composite_waveforms
 
-    # 6. FREQUENCY DOMAIN PROCESSING.
-    X = fft(x_time, axis=1)
-    freqs = fftfreq(N, d=1 / SAMPLING_RATE)
+# ── 6. Simulate: full pipeline ──────────────────────────────────────────────
 
-    # Build the mixing matrix C: dimensions [num_mics x num_sources x N].
-    A = np.zeros((num_mics, len(sources), N), dtype=complex)
-    for i in range(num_mics):
-        for j, src in enumerate(sources):
-            A[i, j, :] = np.exp(-2j * np.pi * freqs * delays_dict[j][i])
 
-    # Predicted observations in the frequency domain.
-    Y_pred = np.zeros((num_mics, N), dtype=complex)
-    for idf in range(N):
-        Y_pred[:, idf] = A[:, :, idf] @ X[:, idf]
+def simulate(
+    mics: np.ndarray,
+    sources: list[SoundSource],
+    active_indices: list[int],
+    sampling_rate: float,
+    duration: float,
+) -> Simulation:
+    """
+    Frequency-domain simulation: Y = A @ X.
 
-    # Reconstruct the source spectrum.
-    Y_fft = fft(y_time, axis=1)
-    num_sources = len(sources)
-    X_pred = np.zeros((num_sources, N), dtype=complex)
-    A_pinv = np.zeros((num_sources, num_mics, N), dtype=complex)
-    for idf in range(N):
-        A_f = A[:, :, idf]
-        A_f_pinv = np.linalg.pinv(A_f)
-        A_pinv[:, :, idf] = A_f_pinv
-        X_pred[:, idf] = A_f_pinv @ Y_fft[:, idf]
+    Dimensions (M=mics, S=sources, N=time samples):
+        x  : (S x N)  time-domain source signals
+        X  : (S x N)  FFT of x
+        A  : (M x S x N) mixing matrix per freq bin
+        Y  : (M x N)  observed spectra
+    """
+    S = len(sources)
+    M = len(mics)
+    N = int(sampling_rate * duration)
 
-    # Inverse FFT to recover time-domain source signals.
-    x_pred = ifft(X_pred, axis=1)
+    # Stack time series -> x (S x N)
+    x = np.array([src.time_series for src in sources])  # (S, N)
+
+    # FFT of source signals -> X (S x N)
+    X = fft(x, axis=1)
+
+    # Frequency bins
+    freqs = fftfreq(N, d=1.0 / sampling_rate)
+
+    # Delay matrix (M x S) and mixing matrix A (M x S x N)
+    delays = compute_delay_matrix(mics, sources)
+    A = compute_mixing_matrix(delays, freqs)
+
+    # Y = A @ X  per frequency bin, vectorised over all bins:
+    # A: (M, S, N), X: (S, N) -> Y_i = \sum_j A_{ij} * X_{j}
+    # Same as Y[:, n] = A[:,:,n] @ X[:, n]
+    Y = np.einsum("msn,sn->mn", A, X)
+
+    # Pseudoinverse recovery: X_pinv[:, n] = pinv(A[:,:,n]) @ Y[:, n]
+    X_pinv = np.zeros((S, N), dtype=complex)
+    for n in range(N):
+        X_pinv[:, n] = np.linalg.pinv(A[:, :, n]) @ Y[:, n]
 
     return Simulation(
-        t=t,
-        composite_waveforms=composite_waveforms,
-        individual_waveforms=individual_waveforms,
-        delays_dict=delays_dict,
-        x_time=x_time,
-        y_time=y_time,
-        X=X,
-        Y=Y_fft,
-        freqs=freqs,
+        Y=Y,
         A=A,
-        A_pinv=A_pinv,
-        Y_pred=Y_pred,
-        X_pred=X_pred,
-        x_pred=x_pred,
+        X=X,
+        X_pinv=X_pinv,
+        x=x,
+        freqs=freqs,
         sources=sources,
         mics=mics,
-        walls=walls,
-        sampling_rate=SAMPLING_RATE,
-        duration=simulation_duration,
-        N=N,
         active_indices=active_indices,
+        sampling_rate=sampling_rate,
+        duration=duration,
     )
 
 
-def just_YAX_from_simulation(
-    num_mics=3,
-    num_sources=5,
-    s_sparse=2,
-    freq_index=1,
-    angle_step=0.3,
-    angle_base=np.pi / 4,
-    phase_step=0.3,
-    seed=None,
-):
+# ── 7. Quick simulation ─────────────────────────────────────────────────────
+
+
+def _random_sine_params(num_sources, sampling_rate, rng):
+    """Auto-generate frequencies and phases for sine mode."""
+    nyquist = sampling_rate / 2
+    frequencies = []
+    phases = []
+    for _ in range(num_sources):
+        n_tones = rng.integers(1, 4)  # 1–3 tones per source
+        freqs = sorted(rng.uniform(20, nyquist * 0.2, size=n_tones).tolist())
+        frequencies.append(freqs)
+        phases.append(float(rng.uniform(0, 2 * np.pi)))
+    return frequencies, phases
+
+
+def quick_sim(
+    num_mics: int,
+    num_sources: int,
+    num_active: int,
+    seed: int = 0,
+    sampling_rate: float = 2000.0,
+    duration: float = 0.05,
+    source_distance: float = 1.5,
+    mic_spacing: float = 0.3,
+    array_type: str = "circular",
+    mode: str = "noise",
+    snr_db: float | None = None,
+) -> Simulation:
     """
-    Helper function to run a simulation and extract Y, A, X0, and X_TRUE for a specific frequency index.
+    One-liner convenience: sources on a uniform ring.
+
+    Args:
+        num_mics: Number of microphones (M).
+        num_sources: Number of candidate sources (S).
+        num_active: How many sources emit signal.
+        seed: Master seed — split internally so that changing num_active
+              does not alter the noise waveforms of already-selected sources.
+        sampling_rate: Sampling rate in Hz.
+        duration: Signal duration in seconds.
+        source_distance: Distance of the source ring from the origin (m).
+        mic_spacing: Spacing parameter for the mic array (m).
+        array_type: "circular" or "linear".
+        mode: "noise" (white Gaussian) or "sine" (random sum-of-sines).
+        snr_db: If given, additive white Gaussian noise is added to Y
+                at this SNR (dB).  None means noiseless.
+
     Returns:
-        Y: Measurements at microphones for a specific frequency index
-        A: Mixing matrix at that frequency index
-        X0: Initial guess for source signals (pseudoinverse solution)
-        X_TRUE: True source signals from the simulation
+        Simulation dataclass with Y, A, X, x, etc.
     """
-    sim = run_simulation(
+    rng = np.random.default_rng(seed)
+    selection_seed = int(rng.integers(0, 2**31))
+    signal_seed = int(rng.integers(0, 2**31))
+
+    # Uniform ring: sources equally spaced around 2π
+    angle_step = 2 * np.pi / num_sources
+
+    mics, sources = construct_geometry(
         num_mics=num_mics,
+        array_type=array_type,
+        mic_spacing=mic_spacing,
         num_sources=num_sources,
-        s_sparse=s_sparse,
+        source_distance=source_distance,
+        angle_base=0.0,
         angle_step=angle_step,
-        angle_base=angle_base,
-        phase_step=phase_step,
-        seed=seed,
     )
-    Y = sim.Y[:, freq_index].reshape(-1, 1)  # Measurements
-    A = sim.A[:, :, freq_index]  # Mixing matrix
-    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
-    X_TRUE = sim.X[:, freq_index]  # True source signals
-    return Y, A, X0, X_TRUE
+
+    active = select_active_sources(sources, num_active, seed=selection_seed)
+
+    if mode == "sine":
+        sine_rng = np.random.default_rng(signal_seed)
+        frequencies, phases = _random_sine_params(num_sources, sampling_rate, sine_rng)
+        sources, _ = generate_signals(
+            sources,
+            active,
+            sampling_rate,
+            duration,
+            mode="sine",
+            frequencies=frequencies,
+            phases=phases,
+        )
+    else:
+        sources, _ = generate_signals(
+            sources,
+            active,
+            sampling_rate,
+            duration,
+            mode="noise",
+            seed=signal_seed,
+        )
+
+    sim = simulate(mics, sources, active, sampling_rate, duration)
+
+    # Optional measurement noise
+    if snr_db is not None:
+        noise_rng = np.random.default_rng(seed + 1)
+        signal_power = np.mean(np.abs(sim.Y) ** 2)
+        noise_power = signal_power / (10 ** (snr_db / 10))
+        noise = np.sqrt(noise_power / 2) * (
+            noise_rng.standard_normal(sim.Y.shape)
+            + 1j * noise_rng.standard_normal(sim.Y.shape)
+        )
+        sim.Y = sim.Y + noise
+
+    return sim
 
 
-if __name__ == "__main__":
-    # 1.
-    mics, sources = construct_geometry(3, "circular", 0.1, 10, 1, 1, 0.3)
+# ── 8. Sector simulation ────────────────────────────────────────────────────
+
+
+def quick_sector_sim(
+    num_mics: int,
+    num_sources: int,
+    num_active: int,
+    seed: int = 0,
+    sampling_rate: float = 2000.0,
+    duration: float = 0.05,
+    source_distance: float = 1.5,
+    mic_radius: float = 0.3,
+    angle_start: float = 0.0,
+    angle_span: float = np.pi / 2,
+    mode: str = "noise",
+    snr_db: float | None = None,
+) -> Simulation:
+    """
+    Sector convenience sim: mics on an arc, sources in the same angular sector.
+
+    Both microphones and sources are placed within
+    [angle_start, angle_start + angle_span].
+
+    Args:
+        num_mics:        Number of microphones (M).
+        num_sources:     Number of candidate sources (S).
+        num_active:      How many sources emit signal.
+        seed:            Master seed.
+        sampling_rate:   Sampling rate in Hz.
+        duration:        Signal duration in seconds.
+        source_distance: Radius of the source ring (m).
+        mic_radius:      Radius of the mic arc (m).
+        angle_start:     Starting angle of the sector (rad).
+        angle_span:      Angular width of the sector (rad).
+        mode:            "noise" (white Gaussian) or "sine" (random sum-of-sines).
+        snr_db:          Optional measurement noise level (dB).
+
+    Returns:
+        Simulation dataclass.
+    """
+    rng = np.random.default_rng(seed)
+    selection_seed = int(rng.integers(0, 2**31))
+    signal_seed = int(rng.integers(0, 2**31))
+
+    # Mics on an arc
+    mics = arc_array(num_mics, mic_radius, angle_start, angle_span)
+
+    # Sources evenly spaced in the same sector
+    if num_sources == 1:
+        source_angles = [angle_start + angle_span / 2]
+    else:
+        source_angles = np.linspace(
+            angle_start, angle_start + angle_span, num_sources, endpoint=True
+        )
+
+    sources = [
+        SoundSource(distance=source_distance, angle=float(a), time_series=None)
+        for a in source_angles
+    ]
+
+    active = select_active_sources(sources, num_active, seed=selection_seed)
+
+    if mode == "sine":
+        sine_rng = np.random.default_rng(signal_seed)
+        frequencies, phases = _random_sine_params(num_sources, sampling_rate, sine_rng)
+        sources, _ = generate_signals(
+            sources,
+            active,
+            sampling_rate,
+            duration,
+            mode="sine",
+            frequencies=frequencies,
+            phases=phases,
+        )
+    else:
+        sources, _ = generate_signals(
+            sources,
+            active,
+            sampling_rate,
+            duration,
+            mode="noise",
+            seed=signal_seed,
+        )
+
+    sim = simulate(mics, sources, active, sampling_rate, duration)
+
+    # Optional measurement noise
+    if snr_db is not None:
+        noise_rng = np.random.default_rng(seed + 1)
+        signal_power = np.mean(np.abs(sim.Y) ** 2)
+        noise_power = signal_power / (10 ** (snr_db / 10))
+        noise = np.sqrt(noise_power / 2) * (
+            noise_rng.standard_normal(sim.Y.shape)
+            + 1j * noise_rng.standard_normal(sim.Y.shape)
+        )
+        sim.Y = sim.Y + noise
+
+    return sim

@@ -33,3 +33,25 @@ def circular_array(array_size, radius):
         [radius * np.sin(x * angle_spacing) for x in range(array_size)]
     )
     return np.column_stack((x_microphone_positions, y_microphone_positions))
+
+
+def arc_array(array_size, radius, angle_start=0.0, angle_span=np.pi / 2):
+    """
+    Place microphones along a circular arc.
+
+    Args:
+        array_size: Number of microphones.
+        radius: Radius of the arc (m).
+        angle_start: Starting angle of the arc (rad).
+        angle_span: Angular extent of the arc (rad).  Mics are
+                    distributed evenly within [angle_start, angle_start + angle_span].
+
+    Returns:
+        (array_size, 2) array of XY positions.
+    """
+    if array_size == 1:
+        angle = angle_start + angle_span / 2
+        return np.array([[radius * np.cos(angle), radius * np.sin(angle)]])
+
+    angles = np.linspace(angle_start, angle_start + angle_span, array_size, endpoint=True)
+    return np.column_stack((radius * np.cos(angles), radius * np.sin(angles)))
