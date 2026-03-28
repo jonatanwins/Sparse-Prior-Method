@@ -32,11 +32,11 @@ def _run(num_mics=6, num_sources=4, num_active=2, mode="sine", seed=42):
     mics, sources = construct_geometry(
         num_mics=num_mics,
         array_type="circular",
-        mic_spacing=0.1,
         num_sources=num_sources,
         source_distance=1.5,
-        angle_base=np.pi / 4,
-        angle_step=0.3,
+        mic_radius=0.1,
+        angle_start=np.pi / 4,
+        angle_span=2 * np.pi,
     )
     active = select_active_sources(sources, num_active, seed=seed)
 
@@ -88,6 +88,19 @@ class TestShapes:
         assert sim.Y.shape == (M, N)
         assert sim.freqs.shape == (N,)
         assert sim.mics.shape == (M, 2)
+
+    def test_arc_geometry_runs(self):
+        mics, sources = construct_geometry(
+            num_mics=5,
+            array_type="arc",
+            num_sources=3,
+            source_distance=1.5,
+            mic_radius=0.1,
+            angle_start=np.pi / 6,
+            angle_span=np.pi / 3,
+        )
+        assert mics.shape == (5, 2)
+        assert len(sources) == 3
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ def plot_sources(ax, sources, source_color: str = "dodgerblue"):
 
 
 @typechecked
-def plot_mics(ax, mics, mic_color="crimson"):
+def plot_mics(ax, mics, mic_color="crimson", annotate=False):
     # Plot microphones
     ax.scatter(
         mics[:, 0],
@@ -39,10 +39,10 @@ def plot_mics(ax, mics, mic_color="crimson"):
         edgecolor="k",
         label="Microphones",
     )
-
-    # Annotate each microphone with its microphone number (starting from 0)
-    for idx, (x, y) in enumerate(zip(mics[:, 0], mics[:, 1])):
-        ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=8, color=mic_color)
+    if annotate:
+        # Annotate each microphone with its microphone number (starting from 0)
+        for idx, (x, y) in enumerate(zip(mics[:, 0], mics[:, 1])):
+            ax.text(x - 0.01, y + 0.05, f"{idx}", fontsize=8, color=mic_color)
 
 
 def plot_walls(ax, walls, wall_color="gray"):
@@ -100,6 +100,31 @@ def plot_geometry_on_ax(
     lower_bound = min(x_min, y_min) - pad_factor * max_span
     upper_bound = max(x_max, y_max) + pad_factor * max_span
     ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
+
+
+def plot_sim_geometry(sim, dpi: int = 70, pad_factor: float = 0.2, show: bool = True):
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(dpi=dpi)
+    plot_geometry_on_ax(ax, sim.mics, sim.sources, pad_factor=pad_factor)
+
+    for k, i in enumerate(sim.active_indices):
+        sx, sy = sim.sources[i].get_position()
+        ax.scatter(
+            sx,
+            sy,
+            s=80,
+            marker="^",
+            color="gold",
+            edgecolor="k",
+            label="Active sources" if k == 0 else None,
+        )
+
+    ax.legend()
+    if show:
+        plt.show()
+    else:
+        return fig, ax
 
 
 # ------ Functions related to walls ----------------------------------------

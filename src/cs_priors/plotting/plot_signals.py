@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 from scipy.fft import ifft
 from typeguard import typechecked
 
-from ..simulation.Simulation import Simulation
-
 
 @typechecked
 def plot_signal_on_ax(
@@ -155,8 +153,9 @@ def plot_magnitude_spectrum(
 
 
 def plot_recovery(
-    sim: Simulation,
+    X: np.ndarray,
     X_pred: np.ndarray,
+    active_indices: list[int] | None = None,
     title: str | None = None,
     figsize_width: float = 10,
     height_per_signal: float = 2.0,
@@ -164,11 +163,12 @@ def plot_recovery(
     mode: str = "compact",
 ):
     """
-    Compare recovered source signals against ground truth.
+    Compare recovered source signals against ground truth in the time domain.
 
     Args:
-        sim: Original Simulation (provides x, active_indices, duration, etc.)
+        X: (S x N) complex reference spectra.
         X_pred: (S x N) complex predicted spectra from a solver.
+        active_indices: Optional list of active source indices.
         title: Optional suptitle.
         figsize_width: Figure width (inches).
         height_per_signal: Height per subplot (inches).
@@ -187,17 +187,24 @@ def plot_recovery(
             f"Unknown mode {mode!r}. Choose 'all', 'compact', or 'active_only'."
         )
 
-    S, N = sim.x.shape
+    x_true = ifft(X, axis=1).real
     x_pred = ifft(X_pred, axis=1).real
-    t = np.linspace(0, sim.duration, N, endpoint=False)
-    active_set = set(sim.active_indices)
+
+    if x_true.shape != x_pred.shape:
+        raise ValueError(
+            f"X and X_pred must have matching shapes, got {X.shape} and {X_pred.shape}"
+        )
+
+    S, N = x_true.shape
+    t = np.arange(N)
+    active_set = set(range(S)) if active_indices is None else set(active_indices)
 
     # Shared y-axis scale across all subplots
-    y_max = max(np.max(np.abs(sim.x)), np.max(np.abs(x_pred)))
+    y_max = max(np.max(np.abs(x_true)), np.max(np.abs(x_pred)))
 
     if mode == "all":
         return _plot_recovery_all(
-            sim,
+            x_true,
             x_pred,
             t,
             S,
@@ -210,7 +217,7 @@ def plot_recovery(
         )
     elif mode == "active_only":
         return _plot_recovery_active_only(
-            sim,
+            x_true,
             x_pred,
             t,
             active_set,
@@ -222,7 +229,7 @@ def plot_recovery(
         )
     else:  # compact
         return _plot_recovery_compact(
-            sim,
+            x_true,
             x_pred,
             t,
             S,
@@ -263,7 +270,7 @@ def _annotate_source(ax, t, x_true, x_pred, label, y_max, is_active=True, legend
 
 
 def _plot_recovery_all(
-    sim, x_pred, t, S, active_set, y_max, title, figsize_width, height_per_signal, dpi
+    x_true, x_pred, t, S, active_set, y_max, title, figsize_width, height_per_signal, dpi
 ):
     """One subplot per source."""
     fig, axes = plt.subplots(
@@ -278,21 +285,21 @@ def _plot_recovery_all(
         _annotate_source(
             axes[i],
             t,
-            sim.x[i],
+            x_true[i],
             x_pred[i],
             f"S{i} ({tag})",
             y_max,
             is_active=is_active,
             legend=(i == 0),
         )
-    axes[-1].set_xlabel("Time (s)")
-    fig.suptitle(title or "Recovery: original x vs ifft(X_pred)")
+    axes[-1].set_xlabel("Sample index")
+    fig.suptitle(title or "Recovery: ifft(X) vs ifft(X_pred)")
     fig.tight_layout()
     return fig, axes
 
 
 def _plot_recovery_active_only(
-    sim, x_pred, t, active_set, y_max, title, figsize_width, height_per_signal, dpi
+    x_true, x_pred, t, active_set, y_max, title, figsize_width, height_per_signal, dpi
 ):
     """Only active sources."""
     active_list = sorted(active_set)
@@ -311,21 +318,21 @@ def _plot_recovery_active_only(
         _annotate_source(
             axes[j],
             t,
-            sim.x[i],
+            x_true[i],
             x_pred[i],
             f"S{i} (active)",
             y_max,
             is_active=True,
             legend=(j == 0),
         )
-    axes[-1].set_xlabel("Time (s)")
+    axes[-1].set_xlabel("Sample index")
     fig.suptitle(title or "Recovery (active sources only)")
     fig.tight_layout()
     return fig, axes
 
 
 def _plot_recovery_compact(
-    sim, x_pred, t, S, active_set, y_max, title, figsize_width, height_per_signal, dpi
+    x_true, x_pred, t, S, active_set, y_max, title, figsize_width, height_per_signal, dpi
 ):
     """One subplot per active source + one combined subplot for all mute sources."""
     active_list = sorted(active_set)
@@ -349,7 +356,7 @@ def _plot_recovery_compact(
         _annotate_source(
             axes[j],
             t,
-            sim.x[i],
+            x_true[i],
             x_pred[i],
             f"S{i} (active)",
             y_max,
@@ -363,10 +370,10 @@ def _plot_recovery_compact(
         for k, i in enumerate(mute_list):
             lbl_orig = "Original" if k == 0 else None
             lbl_rec = "Recovered" if k == 0 else None
-            ax_mute.plot(t, sim.x[i], "k-", alpha=0.2, linewidth=0.5, label=lbl_orig)
+            ax_mute.plot(t, x_true[i], "k-", alpha=0.2, linewidth=0.5, label=lbl_orig)
             ax_mute.plot(t, x_pred[i], "r--", alpha=0.2, linewidth=0.5, label=lbl_rec)
         # Aggregate MSE over all mute sources
-        mute_mse = np.mean((sim.x[mute_list] - x_pred[mute_list]) ** 2)
+        mute_mse = np.mean((x_true[mute_list] - x_pred[mute_list]) ** 2)
         ax_mute.set_ylabel(f"Mute ({len(mute_list)} src)")
         ax_mute.text(
             0.98,
@@ -381,7 +388,7 @@ def _plot_recovery_compact(
         ax_mute.grid(True)
         ax_mute.legend(loc="upper left", fontsize=8)
 
-    axes[-1].set_xlabel("Time (s)")
+    axes[-1].set_xlabel("Sample index")
     fig.suptitle(title or "Recovery (compact)")
     fig.tight_layout()
     return fig, axes

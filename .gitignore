@@ -165,3 +165,4 @@ cython_debug/
 temp.py
 .DS_Store
 .vscode/
+.codex/

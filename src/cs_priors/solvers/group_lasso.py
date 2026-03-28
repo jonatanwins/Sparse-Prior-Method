@@ -169,3 +169,53 @@ def group_lasso_solve(
     X_pred = X_block_complex.reshape(S, N)
 
     return X_pred
+
+
+def group_lasso_custom_solve(
+    sim: Simulation,
+    group_reg: float,
+    l1_reg: float,
+    frobenius_lipschitz: bool,
+    scale_reg="inverse_group_size",
+    subsampling_scheme=1,
+    n_iter=1000,
+    tol=1e-3,
+    warm_start=True,
+    grouping: str = "frequency",
+    seed: int = 0,
+) -> np.ndarray:
+
+    if grouping not in _GROUP_STRATEGIES:
+        raise ValueError(
+            f"Unknown grouping {grouping!r}. "
+            f"Choose from {list(_GROUP_STRATEGIES.keys())}"
+        )
+
+    A_block, Y_block, S, N = _to_block_system(sim)
+
+    # Real-augmented form for the real-valued GroupLasso optimizer
+    A_real = to_real_augmented(A_block)
+    Y_real = to_real_augmented(Y_block)
+
+    groups = _GROUP_STRATEGIES[grouping](S, N, seed=seed)
+
+    model = GroupLasso(
+        groups=groups,
+        group_reg=group_reg,
+        l1_reg=l1_reg,
+        n_iter=n_iter,
+        tol=tol,
+        scale_reg=scale_reg,
+        subsampling_scheme=subsampling_scheme,
+        fit_intercept=False,
+        frobenius_lipschitz=frobenius_lipschitz,
+        warm_start=warm_start,
+        supress_warning=True,
+    )
+    model.fit(A_real, Y_real.ravel())
+
+    # Back to complex block vector, then reshape to (S, N)
+    X_block_complex = from_real_augmented(model.coef_.reshape(-1, 1))
+    X_pred = X_block_complex.reshape(S, N)
+
+    return X_pred

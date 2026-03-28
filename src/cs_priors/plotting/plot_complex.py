@@ -117,7 +117,7 @@ def plot_matrices(
     show_values=True,
     polar=True,
     font_size=8,
-    dpi=None,
+    dpi=70,
 ):
     """
     Plot multiple complex matrices in an automatically arranged grid.
