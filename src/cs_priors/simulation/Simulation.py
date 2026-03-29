@@ -11,6 +11,9 @@ class Simulation:
     X: np.ndarray  # (S x F) source spectra
     X_pinv: np.ndarray  # (S x F) pseudoinverse recovery: pinv(A) @ Y
     x: np.ndarray  # (S x N) source time-domain signals
+    Y_clean: np.ndarray  # (M x F) noise-free measurements
+    eta: np.ndarray  # (M x F) sensor noise
+    delta: np.ndarray  # (S x F) model noise
     freqs: np.ndarray  # (F,) frequency bins
     sources: list  # list of SoundSource
     mics: np.ndarray  # (M x 2) mic positions

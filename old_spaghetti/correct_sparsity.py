@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cs_priors.plotting.plot_complex import plot_matrices
 from cs_priors.plotting.plotting import plot_equation, wrapper_plot_geometry
-from cs_priors.solvers.moe_group_lasso import (
+from cs_priors.solvers.legacy.moe_group_lasso import (
     tensor_to_block_matrix,
     matrix_to_block_vector,
 )
@@ -24,7 +24,7 @@ if str(src_path) not in sys.path:
 from cs_priors.solvers.vectorized_sparse_prior import (
     sparse_prior_solution,
 )
-from cs_priors.solvers.complex_lasso import complex_lasso
+from cs_priors.solvers.frequency_lasso import frequency_lasso_solve
 from cs_priors.simulation.mixing_model import (
     run_simulation,
     just_YAX_from_simulation,
@@ -292,7 +292,7 @@ if __name__ == "__main__":
 
     from cs_priors.simulation.mixing_model import run_simulation
 
-    from cs_priors.solvers.complex_lasso import complex_lasso
+    from cs_priors.solvers.frequency_lasso import frequency_lasso_solve
 
     sim = run_simulation(num_sources=10, num_mics=5, s_sparse=3)
     Y = sim.Y[:, 1]
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     X0 = np.linalg.pinv(A) @ Y
     X_TRUE = sim.X[:, 1]
 
-    X_lasso = complex_lasso(Y=Y, A=A, alpha=0.1)
+    X_lasso = frequency_lasso_solve(Y=Y, A=A, alpha=0.1)
     tol = noise_threshold(X0, tolerance_factor=0.1)
     # plot_wrong_predictions(X_TRUE, X_lasso, tol)
     heatmap_average_wrong_sources(

@@ -79,6 +79,83 @@ def mixing_tensor_to_frequency_major_matrix(tensor: np.ndarray) -> np.ndarray:
     return block_matrix
 
 
+def complex_matrix_to_augmented_real_matrix(matrix: np.ndarray) -> np.ndarray:
+    """Complex 2D operator M -> [[Re(M), -Im(M)], [Im(M), Re(M)]]."""
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError(f"Expected a 2D matrix, got shape {matrix.shape}")
+    return np.block([[matrix.real, -matrix.imag], [matrix.imag, matrix.real]])
+
+
+# ------ Normalization of input shapes -------
+
+
+def normalize_frequency_system(
+    A: np.ndarray,
+    Y: np.ndarray,
+    X: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, bool]:
+    """
+    Normalize to the canonical complex multi-frequency shapes:
+        A -> (M, S, F)
+        Y -> (M, F)
+        X -> (S, F) if provided
+
+    Returns:
+        A_norm, Y_norm, X_norm, was_single_frequency
+    """
+    A = np.asarray(A)
+    Y = np.asarray(Y)
+    X_norm = None if X is None else np.asarray(X)
+
+    if A.ndim == 2:
+        A = A[:, :, None]
+        was_single_frequency = True
+    elif A.ndim == 3:
+        was_single_frequency = A.shape[2] == 1
+    else:
+        raise ValueError(f"Expected A with ndim 2 or 3, got shape {A.shape}")
+
+    num_mics, num_sources, num_freqs = A.shape
+
+    if Y.ndim == 1:
+        if num_freqs != 1:
+            raise ValueError(
+                f"1D Y is only valid for single-frequency systems, got A.shape={A.shape}"
+            )
+        if Y.shape[0] != num_mics:
+            raise ValueError(f"Expected Y of length {num_mics}, got shape {Y.shape}")
+        Y = Y.reshape(num_mics, 1)
+    elif Y.ndim == 2:
+        if Y.shape != (num_mics, num_freqs):
+            raise ValueError(
+                f"Expected Y with shape {(num_mics, num_freqs)}, got {Y.shape}"
+            )
+    else:
+        raise ValueError(f"Expected Y with ndim 1 or 2, got shape {Y.shape}")
+
+    if X_norm is not None:
+        if X_norm.ndim == 1:
+            if num_freqs != 1:
+                raise ValueError(
+                    f"1D X is only valid for single-frequency systems, got A.shape={A.shape}"
+                )
+            if X_norm.shape[0] != num_sources:
+                raise ValueError(
+                    f"Expected X of length {num_sources}, got shape {X_norm.shape}"
+                )
+            X_norm = X_norm.reshape(num_sources, 1)
+        elif X_norm.ndim == 2:
+            if X_norm.shape != (num_sources, num_freqs):
+                raise ValueError(
+                    f"Expected X with shape {(num_sources, num_freqs)}, got {X_norm.shape}"
+                )
+        else:
+            raise ValueError(f"Expected X with ndim 1 or 2, got shape {X_norm.shape}")
+
+    return A, Y, X_norm, was_single_frequency
+
+
 if __name__ == "__main__":
     # X (S=2, F=3), X_j[k] = jk + i*jk
     X = np.array(

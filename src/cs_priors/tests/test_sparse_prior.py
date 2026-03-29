@@ -1,10 +1,10 @@
 import numpy as np
 from numpy.testing import assert_allclose
 
-from ..solvers.block_sparse_prior import (
+from ..solvers.multifrequency_sparse_prior import (
     _build_precision_matrices,
     quad_form,
-    sparse_prior_solution,
+    sparse_prior_solve,
 )
 from ..solvers.representations import (
     complex_matrix_to_augmented_real_vector,
@@ -30,7 +30,7 @@ def test_true_X_is_locally_optimal_along_null_space_directions():
     B_real = np.block([[B.real, -B.imag], [B.imag, B.real]])
     X_true_real = complex_matrix_to_augmented_real_vector(X_true)
     precision_operators = _build_precision_matrices(
-        X_true, grouping="frequencies", precision=1.0, eps=1e-3
+        X_true, grouping="frequency", precision=1.0, eps=1e-3
     )
 
     def score(z: np.ndarray) -> float:
@@ -53,8 +53,8 @@ def test_true_X_is_locally_optimal_along_null_space_directions():
 
 def test_sparse_prior_keeps_true_X_fixed_when_initialized_at_true_X():
     A, X_true = _example_problem()
-    X_opt = sparse_prior_solution(
-        X_true, A, grouping="frequencies", precision=1.0, eps=1e-3
+    X_opt = sparse_prior_solve(
+        X_true, A, grouping="frequency", precision=1.0, eps=1e-3
     )
     assert_allclose(X_opt, X_true, atol=1e-12)
 
@@ -82,11 +82,11 @@ def test_noisy_ridge_initialization_beats_noisy_pseudoinverse_initialization():
         X0_pinv[:, f] = np.linalg.pinv(A[:, :, f]) @ Y_noisy[:, f]
         X0_ridge[:, f] = ridge_pseudoinverse(A[:, :, f], Y_noisy[:, f], ridge_lambda)
 
-    X_opt_pinv = sparse_prior_solution(
-        X0_pinv, A, grouping="frequencies", precision=1.0, eps=1e-3
+    X_opt_pinv = sparse_prior_solve(
+        X0_pinv, A, grouping="frequency", precision=1.0, eps=1e-3
     )
-    X_opt_ridge = sparse_prior_solution(
-        X0_ridge, A, grouping="frequencies", precision=1.0, eps=1e-3
+    X_opt_ridge = sparse_prior_solve(
+        X0_ridge, A, grouping="frequency", precision=1.0, eps=1e-3
     )
 
     assert np.linalg.norm(X_opt_ridge - X_true) < np.linalg.norm(X_opt_pinv - X_true)

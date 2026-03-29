@@ -12,7 +12,7 @@ import numpy as np
 
 # from typing import Tuple, Optional
 from group_lasso import GroupLasso
-from .real_augmented import (
+from ..real_augmented import (
     to_real_augmented,
     from_real_augmented,
 )  # since this is a package, you need to use relative imports otherwise it will look from the top module (cs_priors)

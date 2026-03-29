@@ -19,7 +19,7 @@ This solver now supports two explicit grouping modes for vector problems:
       as its own prior component.
     - "complex_pairs": groups the real/imaginary pair of each complex
       coefficient together.
-    - "frequencies": groups the coefficients across frequencies for each source
+    - "frequency": groups the coefficients across frequencies for each source
 
 explicit block-vector API.
 """
@@ -91,7 +91,7 @@ def _build_precision_matrices(
             precision=precision,
             eps=eps,
         )
-    elif grouping == "frequencies":
+    elif grouping == "frequency":
         # Lg[g] = Lg[SF+g] = precision*I_F, for all other groups, Lg = eps*I_F
         # Lg = diag(eps*I_F, eps*I_F, ..., precision*I_F at the g-th group, ..., eps*I_F, precision*I_F at the SF+g-th group, ..., eps*I_F)
         complex_groups = _source_groups_frequency_major(S, F)
@@ -214,7 +214,7 @@ def core_sparse_prior(X0, A, precision_operators) -> tuple[np.ndarray, np.ndarra
     return x_opt_complex, B
 
 
-def sparse_prior_solution(
+def sparse_prior_solve(
     X0: np.ndarray,
     A: np.ndarray,
     grouping: str,
@@ -226,7 +226,7 @@ def sparse_prior_solution(
         X0: complex initial solution
         A: complex mixing matrix
         grouping: grouping strategy for the prior. Supported modes are
-            'none', 'complex_pairs', and 'frequencies'
+            'none', 'complex_pairs', and 'frequency'
         precision: precision value for the sparse prior
         eps: small value indicating how sparse the prior tries to enforce the solution to be (lower means more sparse)
 
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     #     titles=["True solution X", "Initial solution X0"],
     # )
 
-    for grouping in ["none", "complex_pairs", "frequencies"]:
+    for grouping in ["none", "complex_pairs", "frequency"]:
         L = _build_precision_matrices(X0, grouping, precision=1.0, eps=0.2)
 
         plot_matrices(
@@ -286,7 +286,7 @@ if __name__ == "__main__":
             titles=[f"Precmat {grouping=} {X0.shape=}"] * len(L),
         )
 
-        x_opt_complex = sparse_prior_solution(
+        x_opt_complex = sparse_prior_solve(
             X0, A, grouping=grouping, precision=1.0, eps=0.005
         )
 

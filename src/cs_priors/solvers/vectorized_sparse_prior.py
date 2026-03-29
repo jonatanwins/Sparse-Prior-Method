@@ -1,6 +1,10 @@
 import numpy as np
 import scipy.optimize as optimize
 
+"""
+Fast implementation of the sparse prior method, but it only works on a single frequency as of now.
+"""
+
 
 # Convert to complex vectors and matrices to augmented real form for optimization
 def to_real_augmented(x_complex: np.ndarray) -> np.ndarray:
@@ -90,7 +94,6 @@ def sparse_prior_solution(Y: np.ndarray, A: np.ndarray, max_iter=10000):
         return X0
 
     # Null space basis vectors are the last (num_sources - rank) rows of Vh
-    # TODO: this might need to be conjugated
     B = Vh[rank:].conj().T  # Shape (num_sources, dim_null_space)
 
     X0_real = to_real_augmented(X0)

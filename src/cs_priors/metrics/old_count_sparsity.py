@@ -28,7 +28,7 @@ from cs_priors.plotting.plotting import (
 from cs_priors.solvers.vectorized_sparse_prior import (
     sparse_prior_solution,
 )
-from cs_priors.solvers.complex_lasso import complex_lasso
+from cs_priors.solvers.frequency_lasso import frequency_lasso_solve
 
 
 def initialize_underdetermined_system(
@@ -167,7 +167,7 @@ def run_comparison_sparsity(
                 X_TRUE = sim.X[:, freq_index]  # True source signals
 
                 X_sp, B = sparse_prior_solution(X0, A)
-                X_lasso = complex_lasso(A, Y, alpha=alpha)
+                X_lasso = frequency_lasso_solve(A, Y, alpha=alpha)
 
                 threshold = noise_threshold(X0)
 
@@ -252,7 +252,7 @@ def average_sparsity_comparison(
             angle_step=2 * np.pi / sources,
         )
         X_sp, B = sparse_prior_solution(X0, A)
-        X_lasso = complex_lasso(A, Y, alpha=alpha)
+        X_lasso = frequency_lasso_solve(A, Y, alpha=alpha)
 
         threshold = noise_threshold(X0)
         error_X0 = nonzero_difference(X_TRUE, X0, tol=threshold)
@@ -370,7 +370,7 @@ def compare_minimal_angle(
                 phase_step=phase_step,
             )
             X_sp, B = sparse_prior_solution(X0, A)
-            X_lasso = complex_lasso(A, Y, alpha=1e-3)
+            X_lasso = frequency_lasso_solve(A, Y, alpha=1e-3)
 
             error_lasso[i] = np.linalg.norm(
                 X_lasso.reshape(-1, 1) - X_TRUE.reshape(-1, 1)
@@ -440,7 +440,7 @@ def tensor_correctly_detected_sources(
                     X_TRUE = sim.X[:, freq_index]  # True source signals
 
                     X_sp, B = sparse_prior_solution(X0, A)
-                    X_lasso = complex_lasso(A, Y, alpha=alpha)
+                    X_lasso = frequency_lasso_solve(A, Y, alpha=alpha)
 
                     threshold = noise_threshold(X0)
 
@@ -490,7 +490,7 @@ if __name__ == "__main__":
     X_TRUE = sim.X[:, freq_index].reshape(-1, 1)  # True source signals
 
     # X_sp, B = sparse_prior_solution(X0, A)
-    X_lasso = complex_lasso(A, Y, alpha=0.001)
+    X_lasso = frequency_lasso_solve(A, Y, alpha=0.001)
 
     threshold = noise_threshold(Y)
     # print(f"Noise threshold: {threshold}")

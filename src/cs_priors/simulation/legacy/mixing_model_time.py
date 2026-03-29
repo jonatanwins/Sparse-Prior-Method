@@ -1,10 +1,10 @@
 import numpy as np
 import random
 from scipy.fft import fft, ifft, fftfreq
-from ..geometry.arrays import circular_array, linear_array
-from ..geometry.sources import SoundSource
-from ..constants import SPEED_OF_SOUND
-from .Simulation import Simulation
+from ...geometry.arrays import circular_array, linear_array
+from ...geometry import SoundSource
+from ...constants import SPEED_OF_SOUND
+from ..Simulation import Simulation
 
 
 def calculate_delays(mics, source: SoundSource):

@@ -1,227 +1,287 @@
 """
 Tests for the frequency-domain simulation pipeline.
 
-Run with:  pytest src/cs_priors/tests/test_simulation.py -v
+Assumes mixing_model.py exposes:
+- moore_penrose_inverse
+- ridge_inverse
+- simulate(..., inverse_method="mp" | "ridge")
 """
 
 import numpy as np
-import pytest
 from numpy.testing import assert_allclose
 from scipy.fft import ifft
 
-from ..constants import SPEED_OF_SOUND
-from ..geometry.SoundSource import SoundSource
+from ..simulation.Simulation import Simulation
 from ..simulation.mixing_model import (
     construct_geometry,
     select_active_sources,
     generate_signals,
-    compute_delay_matrix,
-    compute_mixing_matrix,
+    quick_sim,
     simulate,
+    moore_penrose_inverse,
+    ridge_inverse,
 )
-from ..simulation.Simulation import Simulation
 
 
-# ---------------------------------------------------------------------------
-# Helper: run a full simulation with sensible defaults
-# ---------------------------------------------------------------------------
+def _manual_mp(A: np.ndarray, Y: np.ndarray) -> np.ndarray:
+    M, S, F = A.shape
+    X_mp = np.zeros((S, F), dtype=complex)
+    for k in range(F):
+        X_mp[:, k] = np.linalg.pinv(A[:, :, k]) @ Y[:, k]
+    return X_mp
 
 
-def _run(num_mics=6, num_sources=4, num_active=2, mode="sine", seed=42):
-    """Convenience wrapper that runs the full pipeline."""
+def _manual_ridge(A: np.ndarray, Y: np.ndarray, noise_power: float) -> np.ndarray:
+    M, S, F = A.shape
+    X_ridge = np.zeros((S, F), dtype=complex)
+    I = np.eye(S, dtype=complex)
+    for k in range(F):
+        Ak = A[:, :, k]
+        X_ridge[:, k] = (
+            np.linalg.inv(Ak.conj().T @ Ak + noise_power * I) @ Ak.conj().T @ Y[:, k]
+        )
+    return X_ridge
+
+
+def _run(
+    num_mics: int = 6,
+    num_sources: int = 4,
+    num_active: int = 2,
+    mode: str = "sine",
+    seed: int = 0,
+    sampling_rate: float = 1000.0,
+    duration: float = 0.1,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
+    min_freq_hz: float | None = None,
+    **simulate_kwargs,
+) -> Simulation:
+    master = np.random.default_rng(seed)
+    selection_rng = np.random.default_rng(int(master.integers(0, 2**31)))
+    signal_rng = np.random.default_rng(int(master.integers(0, 2**31)))
+    simulation_seed = int(master.integers(0, 2**31))
+
     mics, sources = construct_geometry(
         num_mics=num_mics,
         array_type="circular",
         num_sources=num_sources,
-        source_distance=1.5,
+        source_distance=0.5,
         mic_radius=0.1,
-        angle_start=np.pi / 4,
-        angle_span=2 * np.pi,
     )
-    active = select_active_sources(sources, num_active, seed=seed)
-
-    sampling_rate = 1000.0
-    duration = 0.01  # 10 ms -> N = 10
+    active = select_active_sources(sources, num_active, rng=selection_rng)
 
     if mode == "sine":
-        freqs = [[100.0]] * num_sources
+        frequencies = [[50.0 * (i + 1)] for i in range(num_sources)]
         phases = [0.3 * i for i in range(num_sources)]
-        generate_signals(
+        sources, _ = generate_signals(
             sources,
-            active,
-            sampling_rate,
-            duration,
+            active_indices=active,
+            sampling_rate=sampling_rate,
+            duration=duration,
             mode="sine",
-            frequencies=freqs,
+            frequencies=frequencies,
             phases=phases,
+            rng=signal_rng,
         )
     else:
-        generate_signals(
+        sources, _ = generate_signals(
             sources,
-            active,
-            sampling_rate,
-            duration,
+            active_indices=active,
+            sampling_rate=sampling_rate,
+            duration=duration,
             mode="noise",
-            seed=seed,
+            rng=signal_rng,
         )
 
-    return simulate(mics, sources, active, sampling_rate, duration)
+    def freq_selector(freqs):
+        if min_freq_hz is None:
+            return np.ones_like(freqs, dtype=bool)
+        return freqs >= min_freq_hz
+
+    return simulate(
+        mics=mics,
+        sources=sources,
+        active_indices=active,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        freq_selector=freq_selector,
+        seed=simulation_seed,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
+        **simulate_kwargs,
+    )
 
 
-# ---------------------------------------------------------------------------
-# 1. Shapes
-# ---------------------------------------------------------------------------
+def _run_square_exact() -> Simulation:
+    num_mics = num_sources = 3
+    sampling_rate = 1000.0
+    duration = 0.1
+
+    mics, sources = construct_geometry(
+        num_mics=num_mics,
+        array_type="circular",
+        num_sources=num_sources,
+        source_distance=0.5,
+        mic_radius=0.1,
+    )
+    active = [0, 1, 2]
+
+    # Zero-mean tones aligned with FFT bins so the DC bin is effectively zero.
+    frequencies = [[100.0], [200.0], [300.0]]
+    phases = [0.1, 0.2, 0.3]
+    sources, _ = generate_signals(
+        sources,
+        active_indices=active,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        mode="sine",
+        frequencies=frequencies,
+        phases=phases,
+        rng=np.random.default_rng(0),
+    )
+
+    return simulate(
+        mics=mics,
+        sources=sources,
+        active_indices=active,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        seed=0,
+        inverse_method="mp",
+    )
 
 
-class TestShapes:
-    def test_simulation_dataclass(self):
-        sim = _run()
-        assert isinstance(sim, Simulation)
+def test_simulate_returns_expected_shapes():
+    sim = _run()
+    N = int(sim.sampling_rate * sim.duration)
+    M = sim.mics.shape[0]
+    S = len(sim.sources)
 
-    def test_all_shapes(self):
-        M, S = 6, 4
-        sim = _run(num_mics=M, num_sources=S)
-        N = int(sim.sampling_rate * sim.duration)
-        assert sim.x.shape == (S, N)
-        assert sim.X.shape == (S, N)
-        assert sim.A.shape == (M, S, N)
-        assert sim.Y.shape == (M, N)
-        assert sim.freqs.shape == (N,)
-        assert sim.mics.shape == (M, 2)
-
-    def test_arc_geometry_runs(self):
-        mics, sources = construct_geometry(
-            num_mics=5,
-            array_type="arc",
-            num_sources=3,
-            source_distance=1.5,
-            mic_radius=0.1,
-            angle_start=np.pi / 6,
-            angle_span=np.pi / 3,
-        )
-        assert mics.shape == (5, 2)
-        assert len(sources) == 3
+    assert isinstance(sim, Simulation)
+    assert sim.x.shape == (S, N)
+    assert sim.X.shape == (S, N)
+    assert sim.A.shape == (M, S, N)
+    assert sim.Y_clean.shape == (M, N)
+    assert sim.Y.shape == (M, N)
+    assert sim.eta.shape == (M, N)
+    assert sim.delta.shape == (S, N)
+    assert sim.X_pinv.shape == (S, N)
+    assert sim.freqs.shape == (N,)
+    assert sim.mics.shape == (M, 2)
 
 
-# ---------------------------------------------------------------------------
-# 2. Forward model:  Y[:, n] == A[:, :, n] @ X[:, n]  for all n
-# ---------------------------------------------------------------------------
+def test_clean_forward_model_matches_einsum():
+    sim = _run(sensor_snr_db=None, model_snr_db=None)
+    expected = np.einsum("msf,sf->mf", sim.A, sim.X)
+    assert_allclose(sim.Y_clean, expected, atol=1e-12)
+    assert_allclose(sim.Y, sim.Y_clean, atol=1e-12)
 
 
-class TestForwardModel:
-    def test_Y_equals_A_times_X(self):
-        sim = _run()
-        N = sim.X.shape[1]
-        for n in range(N):
-            expected = sim.A[:, :, n] @ sim.X[:, n]
-            assert_allclose(sim.Y[:, n], expected, atol=1e-10)
+def test_noisy_observation_decomposes_as_Y_clean_plus_A_delta_plus_eta():
+    sim = _run(sensor_snr_db=20.0, model_snr_db=25.0)
+    expected = sim.Y_clean + np.einsum("msf,sf->mf", sim.A, sim.delta) + sim.eta
+    assert_allclose(sim.Y, expected, atol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# 3. IFFT(X) recovers x  (Parseval / FFT round-trip)
-# ---------------------------------------------------------------------------
+def test_ifft_of_X_recovers_x():
+    sim = _run()
+    x_recovered = ifft(sim.X, axis=1)
+    assert_allclose(x_recovered.real, sim.x, atol=1e-12)
+    assert_allclose(x_recovered.imag, 0.0, atol=1e-12)
 
 
-class TestFFTRoundTrip:
-    def test_ifft_of_X_equals_x(self):
-        sim = _run()
-        x_recovered = ifft(sim.X, axis=1)
-        assert_allclose(x_recovered.real, sim.x, atol=1e-12)
-        assert_allclose(x_recovered.imag, 0.0, atol=1e-12)
+def test_inactive_sources_have_zero_time_signal():
+    sim = _run(num_sources=5, num_active=2)
+    for i in range(len(sim.sources)):
+        if i not in sim.active_indices:
+            assert_allclose(sim.x[i], 0.0, atol=1e-15)
 
 
-# ---------------------------------------------------------------------------
-# 4. Pseudoinverse recovery: pinv(A) @ Y ≈ X  when M > S
-# ---------------------------------------------------------------------------
+def test_seed_reproducibility_for_full_simulation():
+    sim1 = quick_sim(
+        num_mics=4,
+        num_sources=3,
+        num_active=2,
+        seed=99,
+        mode="noise",
+        sensor_snr_db=20.0,
+        model_snr_db=25.0,
+    )
+    sim2 = quick_sim(
+        num_mics=4,
+        num_sources=3,
+        num_active=2,
+        seed=99,
+        mode="noise",
+        sensor_snr_db=20.0,
+        model_snr_db=25.0,
+    )
+
+    assert sim1.active_indices == sim2.active_indices
+    assert_allclose(sim1.x, sim2.x)
+    assert_allclose(sim1.Y_clean, sim2.Y_clean)
+    assert_allclose(sim1.eta, sim2.eta)
+    assert_allclose(sim1.delta, sim2.delta)
+    assert_allclose(sim1.Y, sim2.Y)
+    assert_allclose(sim1.X_pinv, sim2.X_pinv)
 
 
-class TestPseudoinverseRecovery:
-    def test_overdetermined_recovers_X(self):
-        """With more mics than sources and no noise, pinv(A) @ Y ≈ X."""
-        sim = _run(num_mics=8, num_sources=3, num_active=3)
-        N = sim.X.shape[1]
-        X_recovered = np.zeros_like(sim.X)
-        for n in range(N):
-            X_recovered[:, n] = np.linalg.pinv(sim.A[:, :, n]) @ sim.Y[:, n]
-        assert_allclose(X_recovered, sim.X, atol=1e-8)
+def test_sensor_and_model_noise_streams_are_independent_under_toggles():
+    common = dict(
+        num_mics=4,
+        num_sources=3,
+        num_active=2,
+        seed=7,
+        mode="noise",
+        sampling_rate=1000.0,
+        duration=0.05,
+    )
 
-    def test_overdetermined_recovers_x_time(self):
-        """Time-domain recovery via IFFT of pinv solution matches x."""
-        sim = _run(num_mics=8, num_sources=3, num_active=3)
-        N = sim.X.shape[1]
-        X_recovered = np.zeros_like(sim.X)
-        for n in range(N):
-            X_recovered[:, n] = np.linalg.pinv(sim.A[:, :, n]) @ sim.Y[:, n]
-        x_recovered = ifft(X_recovered, axis=1)
-        assert_allclose(x_recovered.real, sim.x, atol=1e-8)
+    sim_sensor = quick_sim(**common, sensor_snr_db=20.0, model_snr_db=None)
+    sim_model = quick_sim(**common, sensor_snr_db=None, model_snr_db=20.0)
+    sim_both = quick_sim(**common, sensor_snr_db=20.0, model_snr_db=20.0)
 
-
-# ---------------------------------------------------------------------------
-# 5. Sparsity: muted sources have zero signals
-# ---------------------------------------------------------------------------
+    assert_allclose(sim_sensor.delta, 0.0, atol=0.0)
+    assert_allclose(sim_model.eta, 0.0, atol=0.0)
+    assert_allclose(sim_sensor.eta, sim_both.eta)
+    assert_allclose(sim_model.delta, sim_both.delta)
 
 
-class TestSparsity:
-    def test_muted_sources_are_zero(self):
-        sim = _run(num_sources=5, num_active=2)
-        for i in range(len(sim.sources)):
-            if i not in sim.active_indices:
-                assert_allclose(sim.x[i], 0.0, atol=1e-15)
-
-    def test_active_count(self):
-        sim = _run(num_sources=5, num_active=2)
-        assert len(sim.active_indices) == 2
-
-    def test_seed_deterministic(self):
-        sim1 = _run(seed=99)
-        sim2 = _run(seed=99)
-        assert sim1.active_indices == sim2.active_indices
-        assert_allclose(sim1.x, sim2.x)
+def test_moore_penrose_helper_matches_manual_pinv():
+    sim = _run(sensor_snr_db=20.0, model_snr_db=25.0)
+    expected = _manual_mp(sim.A, sim.Y)
+    actual = moore_penrose_inverse(sim.A, sim.Y)
+    assert_allclose(actual, expected, atol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# 6. Delay matrix correctness
-# ---------------------------------------------------------------------------
+def test_simulate_mp_solution_matches_manual_pinv():
+    sim = _run(sensor_snr_db=20.0, model_snr_db=25.0, inverse_method="mp")
+    expected = _manual_mp(sim.A, sim.Y)
+    assert_allclose(sim.X_pinv, expected, atol=1e-12)
 
 
-class TestDelays:
-    def test_known_delay(self):
-        """A source at distance d from a mic at the origin -> delay = distance / speed_of_sound."""
-        mic = np.array([[0.0, 0.0]])
-        src = SoundSource(distance=3.0, angle=0.0, time_series=None)
-        delays = compute_delay_matrix(mic, [src])
-        assert_allclose(delays[0, 0], 3.0 / SPEED_OF_SOUND, atol=1e-12)
-
-    def test_delays_positive(self):
-        sim = _run()
-        delays = compute_delay_matrix(sim.mics, sim.sources)
-        assert np.all(delays > 0)
+def test_ridge_helper_matches_direct_ridge_formula():
+    sim = _run(sensor_snr_db=20.0, model_snr_db=None)
+    noise_power = np.mean(np.abs(sim.eta) ** 2)
+    expected = _manual_ridge(sim.A, sim.Y, noise_power)
+    actual = ridge_inverse(sim.A, sim.Y, noise_power)
+    assert_allclose(actual, expected, atol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# 7. Noise mode works
-# ---------------------------------------------------------------------------
+def test_simulate_ridge_solution_matches_direct_ridge_formula():
+    sensor_snr_db = 20.0
+    sim = _run(sensor_snr_db=sensor_snr_db, model_snr_db=None, inverse_method="ridge")
+    P_Y = np.mean(np.abs(sim.Y_clean) ** 2)
+    noise_power = P_Y * (10 ** (-sensor_snr_db / 10))
+    expected = _manual_ridge(sim.A, sim.Y, noise_power)
+    assert_allclose(sim.X_pinv, expected, atol=1e-12)
 
 
-class TestNoiseMode:
-    def test_noise_simulation_runs(self):
-        sim = _run(mode="noise")
-        assert isinstance(sim, Simulation)
-        # active sources should have non-zero signals
-        for i in sim.active_indices:
-            assert np.any(sim.x[i] != 0)
+def test_square_noiseless_all_frequencies_recovers_true_X():
+    sim = _run_square_exact()
 
+    nonzero_bins = np.where(np.linalg.norm(sim.X, axis=0) > 1e-8)[0]
+    for k in nonzero_bins:
+        assert np.linalg.matrix_rank(sim.A[:, :, k]) == sim.A.shape[1]
 
-# ---------------------------------------------------------------------------
-# 8. Parseval's theorem: energy in time ≈ energy in freq / N
-# ---------------------------------------------------------------------------
-
-
-class TestEnergy:
-    def test_parseval(self):
-        sim = _run()
-        N = sim.X.shape[1]
-        for i in range(sim.x.shape[0]):
-            time_energy = np.sum(np.abs(sim.x[i]) ** 2)
-            freq_energy = np.sum(np.abs(sim.X[i]) ** 2) / N
-            assert_allclose(time_energy, freq_energy, rtol=1e-10)
+    assert_allclose(sim.X_pinv, sim.X, atol=1e-10)

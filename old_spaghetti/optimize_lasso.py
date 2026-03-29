@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cs_priors.simulation.mixing_model import run_simulation
 from cs_priors.plotting.plotting import plot_equation, plot_two_line_equation
-from cs_priors.solvers.sparse_prior import (
+from cs_priors.solvers.legacy.sparse_prior import (
     to_real_augmented,
     from_real_augmented,
     sparse_prior_solution,

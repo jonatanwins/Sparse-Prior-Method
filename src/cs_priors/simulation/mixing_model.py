@@ -1,5 +1,4 @@
 import numpy as np
-import random
 from scipy.fft import fft, fftfreq
 from ..geometry.arrays import circular_array, linear_array, arc_array
 from ..geometry.SoundSource import SoundSource
@@ -70,12 +69,15 @@ def construct_geometry(
 # ── 2. Select active (non-mute) sources ─────────────────────────────────────
 
 
-def select_active_sources(sources, num_active_sources, seed=None):
+def select_active_sources(
+    sources: list[SoundSource],
+    num_active_sources: int,
+    rng: np.random.Generator | None = None,
+) -> list[int]:
     """Randomly pick the defined number of active source indices."""
-    if seed is not None:
-        np.random.seed(seed)
-        random.seed(seed)
-    return random.sample(range(len(sources)), num_active_sources)
+    if rng is None:
+        rng = np.random.default_rng()
+    return rng.choice(len(sources), size=num_active_sources, replace=False).tolist()
 
 
 # ── 3. Generate time-domain signals ─────────────────────────────────────────
@@ -89,10 +91,10 @@ def generate_signals(
     mode: str = "sine",
     frequencies: list[list[float]] | None = None,
     phases: list[float] | None = None,
-    seed: int | None = None,
+    rng: np.random.Generator | None = None,
 ):
     """
-    Assign time_series to each source.  Muted sources get zeros.
+    Assign time_series to each source. Muted sources get zeros.
 
     Args:
         mode: "sine" — sum-of-sines per source (requires frequencies, phases).
@@ -103,8 +105,8 @@ def generate_signals(
     N = int(sampling_rate * duration)
     t = np.linspace(0, duration, N, endpoint=False)
 
-    if seed is not None:
-        np.random.seed(seed)
+    if rng is None:
+        rng = np.random.default_rng()
 
     for idx, src in enumerate(sources):
         if idx not in active_indices:
@@ -119,7 +121,7 @@ def generate_signals(
                 axis=0,
             )
         elif mode == "noise":
-            src.time_series = np.random.randn(N)
+            src.time_series = rng.standard_normal(N)
         else:
             raise ValueError(f"Unknown mode '{mode}'. Use 'sine' or 'noise'.")
 
@@ -166,6 +168,65 @@ def compute_mixing_matrix(delays: np.ndarray, freqs: np.ndarray):
     )
 
 
+# -- 6. pseudoinverses ---
+def moore_penrose_inverse(A: np.ndarray, Y: np.ndarray) -> np.ndarray:
+    """
+    Per-frequency Moore-Penrose recovery.
+
+    Args:
+        A: (M, S, F) complex mixing matrix
+        Y: (M, F) complex observations
+
+    Returns:
+        X_mp: (S, F) complex estimate
+    """
+    M, S, F = A.shape
+    if Y.shape != (M, F):
+        raise ValueError(f"Expected Y shape {(M, F)}, got {Y.shape}")
+
+    X_mp = np.zeros((S, F), dtype=complex)
+    for k in range(F):
+        # same as X_mp[:, k] = np.linalg.pinv(A[:, :, k]) @ Y[:, k]
+        X_mp[:, k] = np.linalg.lstsq(A[:, :, k], Y[:, k], rcond=None)[0]
+    return X_mp
+
+
+def ridge_inverse(
+    A: np.ndarray,
+    Y: np.ndarray,
+    noise_power: float,
+) -> np.ndarray:
+    """
+    Per-frequency ridge / Tikhonov recovery with one shared regularization level.
+
+    Args:
+        A: (M, S, F) complex mixing matrix
+        Y: (M, F) complex observations
+        noise_power: scalar observation-space noise power used as lambda
+
+    Returns:
+        X_ridge: (S, F) complex estimate
+    """
+    M, S, F = A.shape
+    if Y.shape != (M, F):
+        raise ValueError(f"Expected Y shape {(M, F)}, got {Y.shape}")
+    if noise_power < 0:
+        raise ValueError("noise_power must be nonnegative")
+
+    X_ridge = np.zeros((S, F), dtype=complex)
+    I = np.eye(S, dtype=complex)
+
+    # X_ridge = (A^H A + noise_power * I)^(-1) A^H Y  per frequency bin
+    for k in range(F):
+        Ak = A[:, :, k]
+        # Solves (A^H A + noise_power * I) X = A^H Y for X, which is more stable than explicitly computing the inverse.
+        X_ridge[:, k] = np.linalg.solve(
+            Ak.conj().T @ Ak + noise_power * I,
+            Ak.conj().T @ Y[:, k],
+        )
+    return X_ridge
+
+
 # ── 6. Simulate: full pipeline ──────────────────────────────────────────────
 
 
@@ -176,6 +237,10 @@ def simulate(
     sampling_rate: float,
     duration: float,
     freq_selector=None,
+    seed: int = 0,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
+    inverse_method: str = "mp",
 ) -> Simulation:
     """
     Frequency-domain simulation: Y = A @ X.
@@ -186,6 +251,11 @@ def simulate(
         A  : (M x S x N) mixing matrix per freq bin
         Y  : (M x N)  observed spectra
     """
+    # Noise seeds
+    rng = np.random.default_rng(seed)
+    sensor_noise_seed = int(rng.integers(0, 2**31))
+    model_noise_seed = int(rng.integers(0, 2**31))
+
     S = len(sources)
     M = len(mics)
     N = int(sampling_rate * duration)
@@ -194,7 +264,7 @@ def simulate(
     x = np.array([src.time_series for src in sources])  # (S, N)
 
     # FFT of source signals -> X (S x N)
-    X = fft(x, axis=1)
+    X = np.array(fft(x, axis=1))
 
     # Frequency bins
     freqs = fftfreq(N, d=1.0 / sampling_rate)
@@ -206,23 +276,58 @@ def simulate(
     # Y = A @ X  per frequency bin, vectorised over all bins:
     # A: (M, S, N), X: (S, N) -> Y_i = \sum_j A_{ij} * X_{j}
     # Same as Y[:, n] = A[:,:,n] @ X[:, n]
-    Y = np.einsum("msn,sn->mn", A, X)
+    Y_clean = np.einsum("msn,sn->mn", A, X)
 
-    # Select only some of the frequencies
+    # Select only some of the frequencies F < N
     if freq_selector is not None:
         freq_mask = freq_selector(freqs)
         F = np.sum(freq_mask)  # number of frequencies after masking
         X = X[:, freq_mask]
         A = A[:, :, freq_mask]
-        Y = Y[:, freq_mask]
+        Y_clean = Y_clean[:, freq_mask]
         freqs = freqs[freq_mask]
     else:
         F = N
 
-    # Pseudoinverse recovery: X_pinv[:, n] = pinv(A[:,:,n]) @ Y[:, n]
-    X_pinv = np.zeros((S, F), dtype=complex)
-    for k in range(F):
-        X_pinv[:, k] = np.linalg.pinv(A[:, :, k]) @ Y[:, k]
+    # Add noise before computing the pseudoinverse
+    eta = np.zeros_like(Y_clean, dtype=complex)
+    delta = np.zeros_like(X, dtype=complex)
+
+    if sensor_snr_db is not None:
+        # snr_db = 10 * log10(P_signal / P_noise)
+        sensor_noise_rng = np.random.default_rng(sensor_noise_seed)
+        P_Y = np.mean(np.abs(Y_clean) ** 2)
+        P_eta = P_Y * (10 ** (-sensor_snr_db / 10))
+        eta = np.sqrt(P_eta / 2) * (
+            sensor_noise_rng.standard_normal(Y_clean.shape)
+            + 1j * sensor_noise_rng.standard_normal(Y_clean.shape)
+        )
+    if model_snr_db is not None:
+        model_noise_rng = np.random.default_rng(model_noise_seed)
+        P_X = np.mean(np.abs(X) ** 2)
+        P_delta = P_X * (10 ** (-model_snr_db / 10))
+        delta = np.sqrt(P_delta / 2) * (
+            model_noise_rng.standard_normal(X.shape)
+            + 1j * model_noise_rng.standard_normal(X.shape)
+        )
+    Y = Y_clean + np.einsum("msn,sn->mn", A, delta) + eta
+
+    # Pseudoinverse recovery: X_pinv[:, k] = pinv(A[:,:,k]) @ Y[:, k]
+    if inverse_method == "mp":
+        X_pinv = moore_penrose_inverse(A, Y)
+    elif inverse_method == "ridge":
+        if model_snr_db is None and sensor_snr_db is not None:
+            noise_power = P_eta
+            X_pinv = ridge_inverse(A, Y, noise_power)
+        else:
+            raise NotImplementedError(
+                "Ridge inverse not implemented for model noise or no sensor noise. "
+                "i.e. only works if model_snr_db is None and sensor_snr_db is not None"
+            )
+    else:
+        raise ValueError(
+            f"Unknown inverse_method '{inverse_method}', choose 'mp' or 'ridge'."
+        )
 
     return Simulation(
         Y=Y,
@@ -230,6 +335,9 @@ def simulate(
         X=X,
         X_pinv=X_pinv,
         x=x,
+        Y_clean=Y_clean,
+        eta=eta,
+        delta=delta,
         freqs=freqs,
         sources=sources,
         mics=mics,
@@ -272,9 +380,9 @@ def quick_sim(
     angle_start: float = 0.0,
     angle_span: float = 2 * np.pi,
     mode: str = "noise",
-    snr_db: float | None = None,
-    mic_spacing: float | None = None,
     min_freq_hz: float | None = None,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
 ) -> Simulation:
     """
     One-liner convenience: sources placed uniformly over the configured angle span.
@@ -293,19 +401,15 @@ def quick_sim(
         angle_start: Starting angle for source placement and arc arrays (rad).
         angle_span: Angular span for source placement and arc arrays (rad).
         mode: "noise" (white Gaussian) or "sine" (random sum-of-sines).
-        snr_db: If given, additive white Gaussian noise is added to Y
-                at this SNR (dB).  None means noiseless.
-        mic_spacing: Deprecated alias for mic_radius.
 
     Returns:
         Simulation dataclass with Y, A, X, x, etc.
     """
+    # Seeds for source randomness, the noise is governed in simulate()
     rng = np.random.default_rng(seed)
-    selection_seed = int(rng.integers(0, 2**31))
-    signal_seed = int(rng.integers(0, 2**31))
-
-    if mic_spacing is not None:
-        mic_radius = mic_spacing
+    selection_rng = np.random.default_rng(int(rng.integers(0, 2**31)))
+    signal_rng = np.random.default_rng(int(rng.integers(0, 2**31)))
+    simulation_seed = int(rng.integers(0, 2**31))
 
     mics, sources = construct_geometry(
         num_mics=num_mics,
@@ -317,28 +421,31 @@ def quick_sim(
         angle_span=angle_span,
     )
 
-    active = select_active_sources(sources, num_active, seed=selection_seed)
+    active = select_active_sources(sources, num_active, rng=selection_rng)
 
     if mode == "sine":
-        sine_rng = np.random.default_rng(signal_seed)
-        frequencies, phases = _random_sine_params(num_sources, sampling_rate, sine_rng)
+
+        frequencies, phases = _random_sine_params(
+            num_sources, sampling_rate, signal_rng
+        )
         sources, _ = generate_signals(
             sources,
-            active,
-            sampling_rate,
-            duration,
+            active_indices=active,
+            sampling_rate=sampling_rate,
+            duration=duration,
             mode="sine",
             frequencies=frequencies,
             phases=phases,
+            rng=signal_rng,
         )
     else:
         sources, _ = generate_signals(
             sources,
-            active,
-            sampling_rate,
-            duration,
+            active_indices=active,
+            sampling_rate=sampling_rate,
+            duration=duration,
             mode="noise",
-            seed=signal_seed,
+            rng=signal_rng,
         )
 
     def freq_selector(freqs):
@@ -347,19 +454,16 @@ def quick_sim(
         return freqs >= min_freq_hz
 
     sim = simulate(
-        mics, sources, active, sampling_rate, duration, freq_selector=freq_selector
+        mics=mics,
+        sources=sources,
+        active_indices=active,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        freq_selector=freq_selector,
+        seed=simulation_seed,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
     )
-
-    # Optional measurement noise
-    if snr_db is not None:
-        noise_rng = np.random.default_rng(seed + 1)
-        signal_power = np.mean(np.abs(sim.Y) ** 2)
-        noise_power = signal_power / (10 ** (snr_db / 10))
-        noise = np.sqrt(noise_power / 2) * (
-            noise_rng.standard_normal(sim.Y.shape)
-            + 1j * noise_rng.standard_normal(sim.Y.shape)
-        )
-        sim.Y = sim.Y + noise
 
     return sim
 
@@ -379,8 +483,9 @@ def quick_sector_sim(
     angle_start: float = 0.0,
     angle_span: float = np.pi / 2,
     mode: str = "noise",
-    snr_db: float | None = None,
-    min_freq_hz: float = None,
+    min_freq_hz: float | None = None,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
 ) -> Simulation:
     """
     Sector convenience sim: mics on an arc, sources in the same angular sector.
@@ -400,8 +505,9 @@ def quick_sector_sim(
         angle_start:     Starting angle of the sector (rad).
         angle_span:      Angular width of the sector (rad).
         mode:            "noise" (white Gaussian) or "sine" (random sum-of-sines).
-        snr_db:          Optional measurement noise level (dB).
         min_freq_hz:     Minimum frequency to include in the simulation (Hz).
+        sensor_snr_db:   SNR of the sensor noise (dB).
+        model_snr_db:    SNR of the model noise (dB).
     Returns:
         Simulation dataclass.
     """
@@ -418,6 +524,7 @@ def quick_sector_sim(
         angle_start=angle_start,
         angle_span=angle_span,
         mode=mode,
-        snr_db=snr_db,
         min_freq_hz=min_freq_hz,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
     )
