@@ -4,10 +4,9 @@ This repository studies sparse source recovery for underdetermined microphone-ar
 
 # Carl-Inge:
 mest relevante filene å se på for pseudoinverser er
-- [test_pinv_noise.ipynb](notebooks/test_pinv_noise.ipynb) som illustrerer hvordan kjøre metodene og simuleringer med forskjellig pseudoinvers og støy.
-- [mixing_model.py](src/cs_priors/simulation/mixing_model.py) her er `moore_penrose_inverse` og `ridge_inverse`.
-- [test_simulation.py](src/cs_priors/tests/test_simulation.py) som sjekker at inversene oppfører seg slik jeg tror de skal.
-- [benchmark.py](src/cs_priors/metrics/benchmark.py) hvordan metodene evalueres
+1. [test_pinv_noise.ipynb](notebooks/test_pinv_noise.ipynb) som illustrerer hvordan kjøre metodene og simuleringer med forskjellig pseudoinvers og støy.
+2. [mixing_model.py](src/cs_priors/simulation/mixing_model.py) her er `moore_penrose_inverse` og `ridge_inverse`.
+3. [test_simulation.py](src/cs_priors/tests/test_simulation.py) som sjekker at inversene oppfører seg slik jeg tror de skal.
 
 ## Installation
 
@@ -59,6 +58,7 @@ sim = quick_sim(
     seed=0,
     sensor_snr_db=20.0,
     min_freq_hz=1.0,
+    inverse_method="ridge",
 )
 
 X_hat = frequency_lasso_solve(sim.Y, sim.A, alpha=1e-4)

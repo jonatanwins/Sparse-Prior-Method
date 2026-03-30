@@ -29,6 +29,7 @@ from .count_sparsity import score
 # Single‑sim helpers
 # ---------------------------------------------------------------------------
 
+
 def run_methods(
     sim: Simulation,
     methods: dict[str, callable],
@@ -43,15 +44,13 @@ def score_methods(
     tol: float | None = None,
 ) -> dict[str, dict[str, float]]:
     """Score each prediction, return ``{name: scores_dict}``."""
-    return {
-        name: score(sim, X_pred, tol=tol)
-        for name, X_pred in predictions.items()
-    }
+    return {name: score(sim, X_pred, tol=tol) for name, X_pred in predictions.items()}
 
 
 # ---------------------------------------------------------------------------
 # Grid sweep
 # ---------------------------------------------------------------------------
+
 
 def _run_one(
     sim_factory: callable,
@@ -81,7 +80,7 @@ def grid_benchmark(
     n_jobs: int = -1,
 ) -> list[dict]:
     """
-    Run every method on every combination of parameters × seeds.
+    Run every method on every combination of parameters x seeds.
 
     Parameters
     ----------
@@ -92,7 +91,7 @@ def grid_benchmark(
         Keys are kwarg names for *sim_factory*, values are lists to sweep.
         Example: ``{"num_mics": [4, 6, 8], "num_active": [1, 2, 3]}``
     methods : dict[str, callable]
-        ``{display_name: fn}`` where ``fn(sim) -> X_pred (S×N)``.
+        ``{display_name: fn}`` where ``fn(sim) -> X_pred (SxN)``.
     num_seeds : int
         Number of random seeds per parameter combination.
     tol : float, optional
@@ -112,14 +111,11 @@ def grid_benchmark(
     combos = list(itertools.product(*param_grid.values()))
 
     tasks = [
-        (dict(zip(keys, combo)), seed)
-        for combo in combos
-        for seed in range(num_seeds)
+        (dict(zip(keys, combo)), seed) for combo in combos for seed in range(num_seeds)
     ]
 
     results = Parallel(n_jobs=n_jobs)(
-        delayed(_run_one)(sim_factory, kw, methods, seed, tol)
-        for kw, seed in tasks
+        delayed(_run_one)(sim_factory, kw, methods, seed, tol) for kw, seed in tasks
     )
 
     # Flatten list of lists
@@ -129,6 +125,7 @@ def grid_benchmark(
 # ---------------------------------------------------------------------------
 # Heatmap convenience wrapper
 # ---------------------------------------------------------------------------
+
 
 def heatmap_benchmark(
     sim_factory: callable,
@@ -159,14 +156,14 @@ def heatmap_benchmark(
         Score column to plot. One of: ``"f1"``, ``"precision"``,
         ``"recall"``, ``"relative_error"``.
     vmin, vmax : float
-        Colour-scale limits (default 0–1).
+        Colour-scale limits (default 0-1).
     figsize : tuple
         Size of each individual heatmap figure.
 
     Returns
     -------
     pd.DataFrame
-        Full results table (one row per param_combo × seed × method).
+        Full results table (one row per param_combo x seed x method).
     """
     import pandas as pd
     import seaborn as sns
