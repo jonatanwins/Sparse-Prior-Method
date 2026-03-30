@@ -383,6 +383,7 @@ def quick_sim(
     min_freq_hz: float | None = None,
     sensor_snr_db: float | None = None,
     model_snr_db: float | None = None,
+    inverse_method: str = "mp",
 ) -> Simulation:
     """
     One-liner convenience: sources placed uniformly over the configured angle span.
@@ -463,6 +464,7 @@ def quick_sim(
         seed=simulation_seed,
         sensor_snr_db=sensor_snr_db,
         model_snr_db=model_snr_db,
+        inverse_method=inverse_method,
     )
 
     return sim
@@ -486,6 +488,7 @@ def quick_sector_sim(
     min_freq_hz: float | None = None,
     sensor_snr_db: float | None = None,
     model_snr_db: float | None = None,
+    inverse_method: str = "mp",
 ) -> Simulation:
     """
     Sector convenience sim: mics on an arc, sources in the same angular sector.
@@ -527,4 +530,5 @@ def quick_sector_sim(
         min_freq_hz=min_freq_hz,
         sensor_snr_db=sensor_snr_db,
         model_snr_db=model_snr_db,
+        inverse_method=inverse_method,
     )
