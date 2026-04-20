@@ -24,7 +24,7 @@ if str(src_path) not in sys.path:
 from cs_priors.solvers.vectorized_sparse_prior import (
     sparse_prior_solution,
 )
-from cs_priors.solvers.frequency_lasso import frequency_lasso_solve
+from cs_priors.solvers.freq_lasso import frequency_lasso_solve
 from cs_priors.simulation.mixing_model import (
     run_simulation,
     just_YAX_from_simulation,
@@ -292,7 +292,7 @@ if __name__ == "__main__":
 
     from cs_priors.simulation.mixing_model import run_simulation
 
-    from cs_priors.solvers.frequency_lasso import frequency_lasso_solve
+    from cs_priors.solvers.freq_lasso import frequency_lasso_solve
 
     sim = run_simulation(num_sources=10, num_mics=5, s_sparse=3)
     Y = sim.Y[:, 1]

@@ -90,16 +90,18 @@ def complex_matrix_to_augmented_real_matrix(matrix: np.ndarray) -> np.ndarray:
 # ------ Normalization of input shapes -------
 
 
-def normalize_frequency_system(
+def ensure_frequency_system_shapes(
     A: np.ndarray,
     Y: np.ndarray,
     X: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, bool]:
     """
-    Normalize to the canonical complex multi-frequency shapes:
-        A -> (M, S, F)
-        Y -> (M, F)
-        X -> (S, F) if provided
+    Adds missing axis for compatibility
+
+    If A is 2D (M, S), it rewrites it to (M, S, 1) by adding a singleton frequency axis.
+    If Y is 1D (M,) for a single-frequency problem, it rewrites it to (M, 1).
+    If X is provided as 1D (S,) for a single-frequency problem, it rewrites it to (S, 1).
+
 
     Returns:
         A_norm, Y_norm, X_norm, was_single_frequency

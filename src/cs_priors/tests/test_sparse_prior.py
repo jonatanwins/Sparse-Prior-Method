@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.testing import assert_allclose
 
-from ..solvers.multifrequency_sparse_prior import (
+from ..solvers.freq_sparse_prior import (
     _build_precision_matrices,
     quad_form,
     sparse_prior_solve,

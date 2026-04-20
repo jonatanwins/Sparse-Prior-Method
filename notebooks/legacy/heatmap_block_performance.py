@@ -26,7 +26,7 @@ from cs_priors.solvers.legacy.moe_group_lasso import (
 from cs_priors.solvers.vectorized_sparse_prior import (
     sparse_prior_solution,
 )
-from cs_priors.solvers.frequency_lasso import frequency_lasso_solve
+from cs_priors.solvers.freq_lasso import frequency_lasso_solve
 from cs_priors.simulation.mixing_model import (
     run_simulation,
 )

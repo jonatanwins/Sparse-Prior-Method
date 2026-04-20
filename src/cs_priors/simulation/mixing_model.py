@@ -92,6 +92,7 @@ def generate_signals(
     frequencies: list[list[float]] | None = None,
     phases: list[float] | None = None,
     rng: np.random.Generator | None = None,
+    amplitude: float = 1.0,
 ):
     """
     Assign time_series to each source. Muted sources get zeros.
@@ -124,6 +125,11 @@ def generate_signals(
             src.time_series = rng.standard_normal(N)
         else:
             raise ValueError(f"Unknown mode '{mode}'. Use 'sine' or 'noise'.")
+
+        # Normalize each source to the same RMS amplitude (before noise is added).
+        rms = np.sqrt(np.mean(src.time_series**2))
+        if rms > 0:
+            src.time_series = amplitude * src.time_series / rms
 
     return sources, t
 
@@ -380,6 +386,7 @@ def quick_sim(
     angle_start: float = 0.0,
     angle_span: float = 2 * np.pi,
     mode: str = "noise",
+    amplitude: float = 1.0,
     min_freq_hz: float | None = None,
     sensor_snr_db: float | None = None,
     model_snr_db: float | None = None,
@@ -402,6 +409,7 @@ def quick_sim(
         angle_start: Starting angle for source placement and arc arrays (rad).
         angle_span: Angular span for source placement and arc arrays (rad).
         mode: "noise" (white Gaussian) or "sine" (random sum-of-sines).
+        amplitude: Amplitude of the signals.
 
     Returns:
         Simulation dataclass with Y, A, X, x, etc.
@@ -438,6 +446,7 @@ def quick_sim(
             frequencies=frequencies,
             phases=phases,
             rng=signal_rng,
+            amplitude=amplitude,
         )
     else:
         sources, _ = generate_signals(
@@ -447,6 +456,7 @@ def quick_sim(
             duration=duration,
             mode="noise",
             rng=signal_rng,
+            amplitude=amplitude,
         )
 
     def freq_selector(freqs):
@@ -485,6 +495,7 @@ def quick_sector_sim(
     angle_start: float = 0.0,
     angle_span: float = np.pi / 2,
     mode: str = "noise",
+    amplitude: float = 1.0,
     min_freq_hz: float | None = None,
     sensor_snr_db: float | None = None,
     model_snr_db: float | None = None,
@@ -511,6 +522,7 @@ def quick_sector_sim(
         min_freq_hz:     Minimum frequency to include in the simulation (Hz).
         sensor_snr_db:   SNR of the sensor noise (dB).
         model_snr_db:    SNR of the model noise (dB).
+        amplitude:       Amplitude of the signals.
     Returns:
         Simulation dataclass.
     """
@@ -531,4 +543,5 @@ def quick_sector_sim(
         sensor_snr_db=sensor_snr_db,
         model_snr_db=model_snr_db,
         inverse_method=inverse_method,
+        amplitude=amplitude,
     )

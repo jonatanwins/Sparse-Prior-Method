@@ -3,10 +3,11 @@ scipy==1.15.2
 matplotlib==3.10.1
 pandas==2.3.3
 seaborn==0.13.2
-scikit-learn==1.6.1
+scikit-learn==1.5.2 # groupyr is incomaptible with scikit-learn 1.6 and above
 group-lasso==1.5.0
+groupyr==0.3.4
 joblib==1.4.2
-typeguard
+typeguard==4.4.4
 pytest==9.0.2
-ipykernel
+ipykernel==6.29.3
 nbformat

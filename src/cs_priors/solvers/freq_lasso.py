@@ -6,7 +6,7 @@ from cs_priors.solvers.representations import (
     complex_matrix_to_augmented_real_matrix,
     complex_matrix_to_augmented_real_vector,
     mixing_tensor_to_frequency_major_matrix,
-    normalize_frequency_system,
+    ensure_frequency_system_shapes,
 )
 
 
@@ -30,7 +30,7 @@ def frequency_lasso_solve(
 
 
     """
-    A, Y, _, _ = normalize_frequency_system(A, Y)
+    A, Y, _, _ = ensure_frequency_system_shapes(A, Y)
     _, num_sources, num_freqs = A.shape
 
     A_big = mixing_tensor_to_frequency_major_matrix(A)  # (MF, SF)

@@ -23,7 +23,7 @@ from cs_priors.solvers.representations import (
     frequency_major_vector_to_matrix,
     matrix_to_frequency_major_vector,
     mixing_tensor_to_frequency_major_matrix,
-    normalize_frequency_system,
+    ensure_frequency_system_shapes,
 )
 
 
@@ -76,7 +76,7 @@ def frequency_group_lasso_solve(
     max_iter: int = 5000,
     seed: int = 0,
 ) -> np.ndarray:
-    A, Y, _, _ = normalize_frequency_system(A, Y)
+    A, Y, _, _ = ensure_frequency_system_shapes(A, Y)
     _, num_sources, num_freqs = A.shape
 
     if grouping not in _GROUP_STRATEGIES:
