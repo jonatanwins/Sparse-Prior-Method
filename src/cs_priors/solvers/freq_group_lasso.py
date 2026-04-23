@@ -75,9 +75,15 @@ def frequency_group_lasso_solve(
     grouping: str = "frequency",
     max_iter: int = 5000,
     seed: int = 0,
+    X_start: np.ndarray | None = None,
 ) -> np.ndarray:
-    A, Y, _, _ = ensure_frequency_system_shapes(A, Y)
+    A, Y, X_start, _ = ensure_frequency_system_shapes(A, Y, X_start)
     _, num_sources, num_freqs = A.shape
+
+    if X_start is None:  # default to mp pseudoinverse
+        X_start = np.zeros((num_sources, num_freqs), dtype=complex)
+        for f in range(num_freqs):
+            X_start[:, f] = np.linalg.lstsq(A[:, :, f], Y[:, f], rcond=None)[0]
 
     if grouping not in _GROUP_STRATEGIES:
         raise ValueError(
@@ -88,6 +94,9 @@ def frequency_group_lasso_solve(
     A_big = mixing_tensor_to_frequency_major_matrix(A)  # (MF, SF)
     A_real = complex_matrix_to_augmented_real_matrix(A_big)  # (2MF, 2SF)
     Y_real = complex_matrix_to_augmented_real_vector(Y).ravel()  # (2MF,)
+    X_start_real = complex_matrix_to_augmented_real_vector(
+        X_start
+    )  # (2SF, 1) no ravel, unlike sklearn lasso
 
     groups = _GROUP_STRATEGIES[grouping](num_sources, num_freqs, seed=seed)
 
@@ -97,10 +106,14 @@ def frequency_group_lasso_solve(
     model = GroupLasso(
         groups=groups,
         group_reg=group_reg,
+        l1_reg=0.0,
         n_iter=max_iter,
         fit_intercept=False,
         supress_warning=True,
+        warm_start=True,
     )
+    model.coef_ = X_start_real.copy()
+    model.intercept_ = np.zeros((1, 1))
     model.fit(A_real, Y_real)
 
     X_real = model.coef_.reshape(-1, 1)  # (2SF, 1)

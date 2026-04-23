@@ -285,3 +285,6 @@ def test_square_noiseless_all_frequencies_recovers_true_X():
         assert np.linalg.matrix_rank(sim.A[:, :, k]) == sim.A.shape[1]
 
     assert_allclose(sim.X_pinv, sim.X, atol=1e-10)
+
+
+# ------ Test signals generated directly in the frequency domain ------

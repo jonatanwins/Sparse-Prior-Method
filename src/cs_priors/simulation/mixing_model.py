@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.fft import fft, fftfreq
+from scipy.fft import fft, fftfreq, ifft
 from ..geometry.arrays import circular_array, linear_array, arc_array
 from ..geometry.SoundSource import SoundSource
 from ..constants import SPEED_OF_SOUND
@@ -134,6 +134,81 @@ def generate_signals(
     return sources, t
 
 
+# -- 3b. Generate frequency-domain signals ─────────────────────────────────
+
+
+def generate_frequency_domain_signals(
+    sources: list[SoundSource],
+    active_indices: list[int],
+    sampling_rate: float,
+    duration: float,
+    component_amplitude: float = 1.0,
+    magnitude_jitter: float = 0.0,
+    rng: np.random.Generator | None = None,
+):
+    """
+    Assign artificial source spectra directly in the frequency domain.
+
+    Active sources get nearly flat positive-frequency magnitudes with random
+    phase. The spectrum is mirrored to be conjugate-symmetric so that the IFFT
+    is real-valued. Inactive sources get zero spectrum.
+
+    Args:
+        component_amplitude: Magnitude of each active positive-frequency bin.
+        magnitude_jitter: Relative perturbation in [0, 1). Example: 0.1 gives
+            magnitudes in [0.9, 1.1] * component_amplitude.
+    """
+    if not 0.0 <= magnitude_jitter < 1.0:
+        raise ValueError("magnitude_jitter must satisfy 0 <= magnitude_jitter < 1")
+
+    N = int(sampling_rate * duration)
+    if N < 2:
+        raise ValueError("sampling_rate * duration must give at least 2 samples")
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    X = np.zeros((len(sources), N), dtype=complex)
+
+    # FFT ordering:
+    # even N: [0, 1, ..., N/2-1, -N/2, ..., -1]
+    # odd N:  [0, 1, ..., (N-1)/2, -(N-1)/2, ..., -1]
+    if N % 2 == 0:
+        positive_bins = np.arange(1, N // 2)
+        nyquist_bin = N // 2
+    else:
+        positive_bins = np.arange(1, (N + 1) // 2)
+        nyquist_bin = None
+
+    for idx, src in enumerate(sources):
+        if idx not in active_indices:
+            src.time_series = np.zeros(N)
+            continue
+
+        magnitudes = np.full(len(positive_bins), component_amplitude, dtype=float)
+        if magnitude_jitter > 0.0:
+            magnitudes *= 1.0 + rng.uniform(
+                -magnitude_jitter, magnitude_jitter, size=len(positive_bins)
+            )
+
+        phases = rng.uniform(0.0, 2 * np.pi, size=len(positive_bins))
+        X[idx, positive_bins] = magnitudes * np.exp(1j * phases)
+        X[idx, -positive_bins] = np.conj(X[idx, positive_bins])
+
+        # Nyquist must be real when N is even.
+        if nyquist_bin is not None:
+            nyquist_magnitude = component_amplitude
+            if magnitude_jitter > 0.0:
+                nyquist_magnitude *= 1.0 + rng.uniform(
+                    -magnitude_jitter, magnitude_jitter
+                )
+            X[idx, nyquist_bin] = nyquist_magnitude * rng.choice([-1.0, 1.0])
+
+        src.time_series = ifft(X[idx]).real
+
+    return sources, X
+
+
 # ── 4. Delay matrix ─────────────────────────────────────────────────────────
 
 
@@ -233,13 +308,11 @@ def ridge_inverse(
     return X_ridge
 
 
-# ── 6. Simulate: full pipeline ──────────────────────────────────────────────
-
-
-def simulate(
+def _simulate_from_spectrum(
     mics: np.ndarray,
     sources: list[SoundSource],
     active_indices: list[int],
+    X: np.ndarray,
     sampling_rate: float,
     duration: float,
     freq_selector=None,
@@ -249,15 +322,11 @@ def simulate(
     inverse_method: str = "mp",
 ) -> Simulation:
     """
-    Frequency-domain simulation: Y = A @ X.
+    Shared simulation core starting from source spectra X.
 
-    Dimensions (M=mics, S=sources, N=time samples):
-        x  : (S x N)  time-domain source signals
-        X  : (S x N)  FFT of x
-        A  : (M x S x N) mixing matrix per freq bin
-        Y  : (M x N)  observed spectra
+    Args:
+        X: (S, N) complex source spectra over the full FFT grid.
     """
-    # Noise seeds
     rng = np.random.default_rng(seed)
     sensor_noise_seed = int(rng.integers(0, 2**31))
     model_noise_seed = int(rng.integers(0, 2**31))
@@ -266,16 +335,22 @@ def simulate(
     M = len(mics)
     N = int(sampling_rate * duration)
 
-    # Stack time series -> x (S x N)
-    x = np.array([src.time_series for src in sources])  # (S, N)
+    X = np.asarray(X)
+    if X.shape != (S, N):
+        raise ValueError(f"Expected X shape {(S, N)}, got {X.shape}")
 
-    # FFT of source signals -> X (S x N)
-    X = np.array(fft(x, axis=1))
+    x_complex = ifft(X, axis=1)
+    if not np.allclose(x_complex.imag, 0.0, atol=1e-10):
+        raise ValueError(
+            "Expected X to be conjugate-symmetric so that the time-domain signals are real."
+        )
+    x = x_complex.real
 
-    # Frequency bins
+    for idx, src in enumerate(sources):
+        src.time_series = x[idx]
+
     freqs = fftfreq(N, d=1.0 / sampling_rate)
 
-    # Delay matrix (M x S) and mixing matrix A (M x S x N)
     delays = compute_delay_matrix(mics, sources)
     A = compute_mixing_matrix(delays, freqs)
 
@@ -284,23 +359,17 @@ def simulate(
     # Same as Y[:, n] = A[:,:,n] @ X[:, n]
     Y_clean = np.einsum("msn,sn->mn", A, X)
 
-    # Select only some of the frequencies F < N
     if freq_selector is not None:
         freq_mask = freq_selector(freqs)
-        F = np.sum(freq_mask)  # number of frequencies after masking
         X = X[:, freq_mask]
         A = A[:, :, freq_mask]
         Y_clean = Y_clean[:, freq_mask]
         freqs = freqs[freq_mask]
-    else:
-        F = N
 
-    # Add noise before computing the pseudoinverse
     eta = np.zeros_like(Y_clean, dtype=complex)
     delta = np.zeros_like(X, dtype=complex)
 
     if sensor_snr_db is not None:
-        # snr_db = 10 * log10(P_signal / P_noise)
         sensor_noise_rng = np.random.default_rng(sensor_noise_seed)
         P_Y = np.mean(np.abs(Y_clean) ** 2)
         P_eta = P_Y * (10 ** (-sensor_snr_db / 10))
@@ -308,6 +377,7 @@ def simulate(
             sensor_noise_rng.standard_normal(Y_clean.shape)
             + 1j * sensor_noise_rng.standard_normal(Y_clean.shape)
         )
+
     if model_snr_db is not None:
         model_noise_rng = np.random.default_rng(model_noise_seed)
         P_X = np.mean(np.abs(X) ** 2)
@@ -316,9 +386,9 @@ def simulate(
             model_noise_rng.standard_normal(X.shape)
             + 1j * model_noise_rng.standard_normal(X.shape)
         )
+
     Y = Y_clean + np.einsum("msn,sn->mn", A, delta) + eta
 
-    # Pseudoinverse recovery: X_pinv[:, k] = pinv(A[:,:,k]) @ Y[:, k]
     if inverse_method == "mp":
         X_pinv = moore_penrose_inverse(A, Y)
     elif inverse_method == "ridge":
@@ -350,6 +420,198 @@ def simulate(
         active_indices=active_indices,
         sampling_rate=sampling_rate,
         duration=duration,
+    )
+
+
+# ── 6. Simulate: full pipeline ──────────────────────────────────────────────
+
+
+# def simulate(
+#     mics: np.ndarray,
+#     sources: list[SoundSource],
+#     active_indices: list[int],
+#     sampling_rate: float,
+#     duration: float,
+#     freq_selector=None,
+#     seed: int = 0,
+#     sensor_snr_db: float | None = None,
+#     model_snr_db: float | None = None,
+#     inverse_method: str = "mp",
+# ) -> Simulation:
+#     """
+#     Frequency-domain simulation: Y = A @ X.
+
+#     Dimensions (M=mics, S=sources, N=time samples):
+#         x  : (S x N)  time-domain source signals
+#         X  : (S x N)  FFT of x
+#         A  : (M x S x N) mixing matrix per freq bin
+#         Y  : (M x N)  observed spectra
+#     """
+#     # Noise seeds
+#     rng = np.random.default_rng(seed)
+#     sensor_noise_seed = int(rng.integers(0, 2**31))
+#     model_noise_seed = int(rng.integers(0, 2**31))
+
+#     S = len(sources)
+#     M = len(mics)
+#     N = int(sampling_rate * duration)
+
+#     # Stack time series -> x (S x N)
+#     x = np.array([src.time_series for src in sources])  # (S, N)
+
+#     # FFT of source signals -> X (S x N)
+#     X = np.array(fft(x, axis=1))
+
+#     # Frequency bins
+#     freqs = fftfreq(N, d=1.0 / sampling_rate)
+
+#     # Delay matrix (M x S) and mixing matrix A (M x S x N)
+#     delays = compute_delay_matrix(mics, sources)
+#     A = compute_mixing_matrix(delays, freqs)
+
+#     # Y = A @ X  per frequency bin, vectorised over all bins:
+#     # A: (M, S, N), X: (S, N) -> Y_i = \sum_j A_{ij} * X_{j}
+#     # Same as Y[:, n] = A[:,:,n] @ X[:, n]
+#     Y_clean = np.einsum("msn,sn->mn", A, X)
+
+#     # Select only some of the frequencies F < N
+#     if freq_selector is not None:
+#         freq_mask = freq_selector(freqs)
+#         F = np.sum(freq_mask)  # number of frequencies after masking
+#         X = X[:, freq_mask]
+#         A = A[:, :, freq_mask]
+#         Y_clean = Y_clean[:, freq_mask]
+#         freqs = freqs[freq_mask]
+#     else:
+#         F = N
+
+#     # Add noise before computing the pseudoinverse
+#     eta = np.zeros_like(Y_clean, dtype=complex)
+#     delta = np.zeros_like(X, dtype=complex)
+
+#     if sensor_snr_db is not None:
+#         # snr_db = 10 * log10(P_signal / P_noise)
+#         sensor_noise_rng = np.random.default_rng(sensor_noise_seed)
+#         P_Y = np.mean(np.abs(Y_clean) ** 2)
+#         P_eta = P_Y * (10 ** (-sensor_snr_db / 10))
+#         eta = np.sqrt(P_eta / 2) * (
+#             sensor_noise_rng.standard_normal(Y_clean.shape)
+#             + 1j * sensor_noise_rng.standard_normal(Y_clean.shape)
+#         )
+#     if model_snr_db is not None:
+#         model_noise_rng = np.random.default_rng(model_noise_seed)
+#         P_X = np.mean(np.abs(X) ** 2)
+#         P_delta = P_X * (10 ** (-model_snr_db / 10))
+#         delta = np.sqrt(P_delta / 2) * (
+#             model_noise_rng.standard_normal(X.shape)
+#             + 1j * model_noise_rng.standard_normal(X.shape)
+#         )
+#     Y = Y_clean + np.einsum("msn,sn->mn", A, delta) + eta
+
+#     # Pseudoinverse recovery: X_pinv[:, k] = pinv(A[:,:,k]) @ Y[:, k]
+#     if inverse_method == "mp":
+#         X_pinv = moore_penrose_inverse(A, Y)
+#     elif inverse_method == "ridge":
+#         if model_snr_db is None and sensor_snr_db is not None:
+#             noise_power = P_eta
+#             X_pinv = ridge_inverse(A, Y, noise_power)
+#         else:
+#             raise NotImplementedError(
+#                 "Ridge inverse not implemented for model noise or no sensor noise. "
+#                 "i.e. only works if model_snr_db is None and sensor_snr_db is not None"
+#             )
+#     else:
+#         raise ValueError(
+#             f"Unknown inverse_method '{inverse_method}', choose 'mp' or 'ridge'."
+#         )
+
+#     return Simulation(
+#         Y=Y,
+#         A=A,
+#         X=X,
+#         X_pinv=X_pinv,
+#         x=x,
+#         Y_clean=Y_clean,
+#         eta=eta,
+#         delta=delta,
+#         freqs=freqs,
+#         sources=sources,
+#         mics=mics,
+#         active_indices=active_indices,
+#         sampling_rate=sampling_rate,
+#         duration=duration,
+#     )
+
+
+def simulate(
+    mics: np.ndarray,
+    sources: list[SoundSource],
+    active_indices: list[int],
+    sampling_rate: float,
+    duration: float,
+    freq_selector=None,
+    seed: int = 0,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
+    inverse_method: str = "mp",
+) -> Simulation:
+    """
+    Time-domain simulation path: build x first, then FFT to X.
+
+    Frequency-domain simulation: Y = A @ X.
+
+    Dimensions (M=mics, S=sources, N=time samples):
+        x  : (S x N)  time-domain source signals
+        X  : (S x N)  FFT of x
+        A  : (M x S x N) mixing matrix per freq bin
+        Y  : (M x N)  observed spectra
+    """
+    x = np.array([src.time_series for src in sources])  # (S, N)
+    X = np.array(fft(x, axis=1))  # (S, N)
+
+    return _simulate_from_spectrum(
+        mics=mics,
+        sources=sources,
+        active_indices=active_indices,
+        X=X,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        freq_selector=freq_selector,
+        seed=seed,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
+        inverse_method=inverse_method,
+    )
+
+
+def simulate_from_frequency_domain(
+    mics: np.ndarray,
+    sources: list[SoundSource],
+    active_indices: list[int],
+    X: np.ndarray,
+    sampling_rate: float,
+    duration: float,
+    freq_selector=None,
+    seed: int = 0,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
+    inverse_method: str = "mp",
+) -> Simulation:
+    """
+    Frequency-domain simulation path: start from a pre-built source spectrum X.
+    """
+    return _simulate_from_spectrum(
+        mics=mics,
+        sources=sources,
+        active_indices=active_indices,
+        X=X,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        freq_selector=freq_selector,
+        seed=seed,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
+        inverse_method=inverse_method,
     )
 
 
@@ -480,6 +742,79 @@ def quick_sim(
     return sim
 
 
+def quick_frequency_sim(
+    num_mics: int,
+    num_sources: int,
+    num_active: int,
+    seed: int = 0,
+    sampling_rate: float = 2000.0,
+    duration: float = 0.05,
+    source_distance: float = 1.5,
+    mic_radius: float = 0.3,
+    array_type: str = "circular",
+    angle_start: float = 0.0,
+    angle_span: float = 2 * np.pi,
+    component_amplitude: float = 1.0,
+    magnitude_jitter: float = 0.0,
+    min_freq_hz: float | None = None,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
+    inverse_method: str = "mp",
+) -> Simulation:
+    """
+    Artificial frequency-domain simulation with near-flat active spectra.
+
+    Each active source gets approximately equal-magnitude frequency components
+    with random phase. This is intended as a solver sanity check rather than a
+    physically realistic source model.
+    """
+    rng = np.random.default_rng(seed)
+    selection_rng = np.random.default_rng(int(rng.integers(0, 2**31)))
+    spectrum_rng = np.random.default_rng(int(rng.integers(0, 2**31)))
+    simulation_seed = int(rng.integers(0, 2**31))
+
+    mics, sources = construct_geometry(
+        num_mics=num_mics,
+        array_type=array_type,
+        num_sources=num_sources,
+        source_distance=source_distance,
+        mic_radius=mic_radius,
+        angle_start=angle_start,
+        angle_span=angle_span,
+    )
+
+    active = select_active_sources(sources, num_active, rng=selection_rng)
+
+    sources, X = generate_frequency_domain_signals(
+        sources,
+        active_indices=active,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        component_amplitude=component_amplitude,
+        magnitude_jitter=magnitude_jitter,
+        rng=spectrum_rng,
+    )
+
+    def freq_selector(freqs):
+        if min_freq_hz is None:
+            return np.ones_like(freqs, dtype=bool)
+        return freqs >= min_freq_hz
+
+    return simulate_from_frequency_domain(
+        mics=mics,
+        sources=sources,
+        active_indices=active,
+        X=X,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        freq_selector=freq_selector,
+        seed=simulation_seed,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
+        inverse_method=inverse_method,
+    )
+
+
 # ── 8. Sector simulation ────────────────────────────────────────────────────
 
 
@@ -544,4 +879,46 @@ def quick_sector_sim(
         model_snr_db=model_snr_db,
         inverse_method=inverse_method,
         amplitude=amplitude,
+    )
+
+
+def quick_sector_frequency_sim(
+    num_mics: int,
+    num_sources: int,
+    num_active: int,
+    seed: int = 0,
+    sampling_rate: float = 2000.0,
+    duration: float = 0.05,
+    source_distance: float = 1.5,
+    mic_radius: float = 0.3,
+    angle_start: float = 0.0,
+    angle_span: float = np.pi / 2,
+    component_amplitude: float = 1.0,
+    magnitude_jitter: float = 0.0,
+    min_freq_hz: float | None = None,
+    sensor_snr_db: float | None = None,
+    model_snr_db: float | None = None,
+    inverse_method: str = "mp",
+) -> Simulation:
+    """
+    Sector version of quick_frequency_sim.
+    """
+    return quick_frequency_sim(
+        num_mics=num_mics,
+        num_sources=num_sources,
+        num_active=num_active,
+        seed=seed,
+        sampling_rate=sampling_rate,
+        duration=duration,
+        source_distance=source_distance,
+        mic_radius=mic_radius,
+        array_type="arc",
+        angle_start=angle_start,
+        angle_span=angle_span,
+        component_amplitude=component_amplitude,
+        magnitude_jitter=magnitude_jitter,
+        min_freq_hz=min_freq_hz,
+        sensor_snr_db=sensor_snr_db,
+        model_snr_db=model_snr_db,
+        inverse_method=inverse_method,
     )

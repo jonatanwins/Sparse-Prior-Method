@@ -4,6 +4,8 @@ from .count_sparsity import (
     active_sources,
     active_elements,
     detection_scores,
+    source_leakage_metrics,
+    format_source_leakage_summary,
     relative_error,
     score,
 )

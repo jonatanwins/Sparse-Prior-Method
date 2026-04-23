@@ -12,7 +12,11 @@ from cs_priors.solvers.representations import (
 
 @typechecked
 def frequency_lasso_solve(
-    Y: np.ndarray, A: np.ndarray, alpha: float = 1e-8, max_iter: int = 10000
+    Y: np.ndarray,
+    A: np.ndarray,
+    alpha: float = 1e-8,
+    max_iter: int = 10000,
+    X_start: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Solve the complex LASSO problem by converting to a real-valued problem.
@@ -30,14 +34,27 @@ def frequency_lasso_solve(
 
 
     """
-    A, Y, _, _ = ensure_frequency_system_shapes(A, Y)
+    A, Y, X_start, _ = ensure_frequency_system_shapes(A, Y, X_start)
     _, num_sources, num_freqs = A.shape
+
+    if X_start is None:  # default to mp pseudoinverse
+        X_start = np.zeros((num_sources, num_freqs), dtype=complex)
+        for f in range(num_freqs):
+            X_start[:, f] = np.linalg.lstsq(A[:, :, f], Y[:, f], rcond=None)[0]
 
     A_big = mixing_tensor_to_frequency_major_matrix(A)  # (MF, SF)
     A_real = complex_matrix_to_augmented_real_matrix(A_big)  # (2MF, 2SF)
     Y_real = complex_matrix_to_augmented_real_vector(Y).ravel()  # (2MF,)
+    X0_real = complex_matrix_to_augmented_real_vector(X_start).ravel()  # (2SF,)
 
-    model = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter)
+    model = Lasso(
+        alpha=alpha,
+        fit_intercept=False,
+        max_iter=max_iter,
+        warm_start=True,
+    )
+    model.coef_ = X0_real.copy()
+    model.intercept_ = 0.0
     model.fit(A_real, Y_real)
 
     X_real = model.coef_.reshape(-1, 1)  # (2SF, 1)
@@ -46,33 +63,6 @@ def frequency_lasso_solve(
     )  # (S, F)
 
     return X_hat
-
-    # ///////////////////////////////////////////////////////////////////////////
-    # assert that dimensions match
-    assert (
-        A.shape[0] == Y.shape[0]
-    ), f"Number of rows in A (shape {A.shape}) must match number of rows in Y (shape {Y.shape})"
-    assert (
-        A.ndim == 2
-    ), f"A must be a 2D array, got shape {A.shape}, did you pass Y and A in the correct order?"
-
-    # If A is full rank, we do not need LASSO
-    X0 = np.linalg.pinv(A) @ Y  # initial guess for X
-    mics, sources = A.shape
-    if mics >= sources:
-        return X0
-
-    X0_real = to_real_augmented(X0)
-    A_real = to_real_augmented(A)
-    Y_real = to_real_augmented(Y)
-
-    lasso = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter)
-    lasso.coef_ = X0_real.flatten()
-    lasso.fit(A_real, Y_real)
-    X_real = lasso.coef_
-
-    X_complex = from_real_augmented(X_real)
-    return X_complex
 
 
 if __name__ == "__main__":

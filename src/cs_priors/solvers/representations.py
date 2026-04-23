@@ -225,3 +225,89 @@ if __name__ == "__main__":
         )
 
     print("representations.py round-trip tests passed")
+
+"""
+============================
+The source/microphone-major layout.
+Needed for groupyr, which expects features to be in contiguous blocks.
+============================
+"""
+
+
+def matrix_to_source_microphone_major_vector(matrix: np.ndarray) -> np.ndarray:
+    """
+    (R, F) -> (RF, 1) with row-major ordering:
+    [row0[f0], row0[f1], ..., row0[fF-1], row1[f0], ...].
+
+    For X, rows are sources.
+    For Y, rows are microphones.
+    """
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError(f"Expected a 2D matrix, got shape {matrix.shape}")
+    return matrix.reshape(-1, order="C").reshape(-1, 1)
+
+
+def source_microphone_major_vector_to_matrix(
+    vector: np.ndarray, num_rows: int, num_freqs: int
+) -> np.ndarray:
+    """(RF, 1) -> (R, F) for source/microphone-major ordering."""
+    vector = _as_column_vector(vector)
+    expected_size = num_rows * num_freqs
+    if vector.shape[0] != expected_size:
+        raise ValueError(
+            f"Expected vector of length {expected_size}, got {vector.shape[0]}"
+        )
+    return vector.ravel().reshape((num_rows, num_freqs), order="C")
+
+
+def complex_matrix_to_augmented_real_source_microphone_major_vector(
+    matrix: np.ndarray,
+) -> np.ndarray:
+    """(R, F) -> (2RF, 1) in source/microphone-major ordering."""
+    vector = matrix_to_source_microphone_major_vector(matrix)
+    return np.vstack([vector.real, vector.imag])
+
+
+def augmented_real_source_microphone_major_vector_to_complex_matrix(
+    vector_real: np.ndarray, num_rows: int, num_freqs: int
+) -> np.ndarray:
+    """(2RF, 1) -> (R, F) in source/microphone-major ordering."""
+    vector_real = _as_column_vector(vector_real)
+    num_complex = num_rows * num_freqs
+    if vector_real.shape[0] != 2 * num_complex:
+        raise ValueError(
+            f"Expected augmented-real vector of length {2 * num_complex}, "
+            f"got {vector_real.shape[0]}"
+        )
+    vector_complex = vector_real[:num_complex] + 1j * vector_real[num_complex:]
+    return source_microphone_major_vector_to_matrix(vector_complex, num_rows, num_freqs)
+
+
+def mixing_tensor_to_source_microphone_major_matrix(tensor: np.ndarray) -> np.ndarray:
+    """
+    A (M, S, F) -> A_big (MF, SF) with:
+    - microphone-major row ordering
+    - source-major column ordering
+
+    This satisfies:
+        vec_sm(Y) = A_big @ vec_sm(X)
+    where vec_sm stacks each row across frequency.
+    """
+    tensor = np.asarray(tensor)
+    if tensor.ndim != 3:
+        raise ValueError(f"Expected a 3D tensor, got shape {tensor.shape}")
+
+    num_mics, num_sources, num_freqs = tensor.shape
+    block_matrix = np.zeros(
+        (num_mics * num_freqs, num_sources * num_freqs),
+        dtype=tensor.dtype,
+    )
+
+    for m in range(num_mics):
+        row_slice = slice(m * num_freqs, (m + 1) * num_freqs)
+        for s in range(num_sources):
+            col_slice = slice(s * num_freqs, (s + 1) * num_freqs)
+            block_matrix[row_slice, col_slice] = np.diag(tensor[m, s, :])
+
+    return block_matrix
