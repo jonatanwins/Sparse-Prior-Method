@@ -10,51 +10,50 @@ from .Simulation import Simulation
 
 
 def construct_geometry(
-    num_mics: int,
     array_type: str,
+    num_mics: int,
     num_sources: int,
-    source_distance: float,
     mic_radius: float | None = None,
-    angle_start: float = 0.0,
-    angle_span: float = 2 * np.pi,
-    mic_spacing: float | None = None,
-    angle_base: float | None = None,
-    angle_step: float | None = None,
+    mic_angle_start: float = 0.0,
+    mic_angle_span: float = 2 * np.pi,
+    source_distance: float | None = None,
+    source_angle_start: float = 0.0,
+    source_angle_span: float = 2 * np.pi,
 ):
     """Create mic array (M x 2) and source list (S,)."""
     array_type = array_type.lower()
 
-    if mic_spacing is not None:
-        mic_radius = mic_spacing
-    if mic_radius is None:
-        raise ValueError("mic_radius must be provided")
+    if mic_radius is None or source_distance is None:
+        raise ValueError("mic_radius and source_distance must be provided")
 
-    if angle_base is not None or angle_step is not None:
-        if angle_base is None or angle_step is None:
-            raise ValueError("angle_base and angle_step must be provided together")
-        source_angles = angle_base + angle_step * np.arange(num_sources)
-    elif num_sources == 1:
-        if array_type == "arc":
-            source_angles = [angle_start + angle_span / 2]
-        else:
-            source_angles = [angle_start]
-    elif array_type == "arc":
-        source_angles = np.linspace(
-            angle_start, angle_start + angle_span, num_sources, endpoint=True
-        )
-    else:
-        angle_step = angle_span / num_sources
-        source_angles = angle_start + angle_step * np.arange(num_sources)
-
+    # 1. Microphones
     if array_type == "linear":
         mics = linear_array(num_mics, mic_radius)
     elif array_type == "circular":
         mics = circular_array(num_mics, mic_radius)
     elif array_type == "arc":
-        mics = arc_array(num_mics, mic_radius, angle_start, angle_span)
+        mics = arc_array(num_mics, mic_radius, mic_angle_start, mic_angle_span)
     else:
         raise ValueError("array_type must be 'linear', 'circular', or 'arc'")
 
+    # 2. Sources
+    if num_sources == 1:
+        source_angles = np.array([source_angle_start])
+    # full circle
+    elif np.isclose(source_angle_span, 2 * np.pi):
+        source_angles = source_angle_start + (
+            source_angle_span / num_sources
+        ) * np.arange(num_sources)
+    # sector
+    else:
+        source_angles = np.linspace(
+            source_angle_start,
+            source_angle_start + source_angle_span,
+            num_sources,
+            endpoint=True,
+        )
+
+    # convert angles to SoundSource objects
     sources = [
         SoundSource(
             distance=source_distance,
@@ -543,7 +542,7 @@ def _simulate_from_spectrum(
 #     )
 
 
-def simulate(
+def simulate_from_time_domain(
     mics: np.ndarray,
     sources: list[SoundSource],
     active_indices: list[int],
@@ -645,8 +644,10 @@ def quick_sim(
     source_distance: float = 1.5,
     mic_radius: float = 0.3,
     array_type: str = "circular",
-    angle_start: float = 0.0,
-    angle_span: float = 2 * np.pi,
+    mic_angle_start: float = 0.0,
+    mic_angle_span: float = 2 * np.pi,
+    source_angle_start: float = 0.0,
+    source_angle_span: float = 2 * np.pi,
     mode: str = "noise",
     amplitude: float = 1.0,
     min_freq_hz: float | None = None,
@@ -666,10 +667,12 @@ def quick_sim(
         sampling_rate: Sampling rate in Hz.
         duration: Signal duration in seconds.
         source_distance: Distance of the source ring from the origin (m).
-        mic_radius: Radius of the mic array (m).
+        mic_radius: Radius of the mic array, or adjacent spacing for linear arrays.
         array_type: "circular", "arc", or "linear".
-        angle_start: Starting angle for source placement and arc arrays (rad).
-        angle_span: Angular span for source placement and arc arrays (rad).
+        mic_angle_start: Starting angle for arc microphone placement (rad).
+        mic_angle_span: Angular span for arc microphone placement (rad).
+        source_angle_start: Starting angle for source placement (rad).
+        source_angle_span: Angular span for source placement (rad).
         mode: "noise" (white Gaussian) or "sine" (random sum-of-sines).
         amplitude: Amplitude of the signals.
 
@@ -683,13 +686,15 @@ def quick_sim(
     simulation_seed = int(rng.integers(0, 2**31))
 
     mics, sources = construct_geometry(
-        num_mics=num_mics,
         array_type=array_type,
+        num_mics=num_mics,
         num_sources=num_sources,
-        source_distance=source_distance,
         mic_radius=mic_radius,
-        angle_start=angle_start,
-        angle_span=angle_span,
+        mic_angle_start=mic_angle_start,
+        mic_angle_span=mic_angle_span,
+        source_distance=source_distance,
+        source_angle_start=source_angle_start,
+        source_angle_span=source_angle_span,
     )
 
     active = select_active_sources(sources, num_active, rng=selection_rng)
@@ -726,7 +731,7 @@ def quick_sim(
             return np.ones_like(freqs, dtype=bool)
         return freqs >= min_freq_hz
 
-    sim = simulate(
+    sim = simulate_from_time_domain(
         mics=mics,
         sources=sources,
         active_indices=active,
@@ -752,8 +757,10 @@ def quick_frequency_sim(
     source_distance: float = 1.5,
     mic_radius: float = 0.3,
     array_type: str = "circular",
-    angle_start: float = 0.0,
-    angle_span: float = 2 * np.pi,
+    mic_angle_start: float = 0.0,
+    mic_angle_span: float = 2 * np.pi,
+    source_angle_start: float = 0.0,
+    source_angle_span: float = 2 * np.pi,
     component_amplitude: float = 1.0,
     magnitude_jitter: float = 0.0,
     min_freq_hz: float | None = None,
@@ -774,13 +781,15 @@ def quick_frequency_sim(
     simulation_seed = int(rng.integers(0, 2**31))
 
     mics, sources = construct_geometry(
-        num_mics=num_mics,
         array_type=array_type,
+        num_mics=num_mics,
         num_sources=num_sources,
-        source_distance=source_distance,
         mic_radius=mic_radius,
-        angle_start=angle_start,
-        angle_span=angle_span,
+        mic_angle_start=mic_angle_start,
+        mic_angle_span=mic_angle_span,
+        source_distance=source_distance,
+        source_angle_start=source_angle_start,
+        source_angle_span=source_angle_span,
     )
 
     active = select_active_sources(sources, num_active, rng=selection_rng)
@@ -809,115 +818,6 @@ def quick_frequency_sim(
         duration=duration,
         freq_selector=freq_selector,
         seed=simulation_seed,
-        sensor_snr_db=sensor_snr_db,
-        model_snr_db=model_snr_db,
-        inverse_method=inverse_method,
-    )
-
-
-# ── 8. Sector simulation ────────────────────────────────────────────────────
-
-
-def quick_sector_sim(
-    num_mics: int,
-    num_sources: int,
-    num_active: int,
-    seed: int = 0,
-    sampling_rate: float = 2000.0,
-    duration: float = 0.05,
-    source_distance: float = 1.5,
-    mic_radius: float = 0.3,
-    angle_start: float = 0.0,
-    angle_span: float = np.pi / 2,
-    mode: str = "noise",
-    amplitude: float = 1.0,
-    min_freq_hz: float | None = None,
-    sensor_snr_db: float | None = None,
-    model_snr_db: float | None = None,
-    inverse_method: str = "mp",
-) -> Simulation:
-    """
-    Sector convenience sim: mics on an arc, sources in the same angular sector.
-
-    Both microphones and sources are placed within
-    [angle_start, angle_start + angle_span].
-
-    Args:
-        num_mics:        Number of microphones (M).
-        num_sources:     Number of candidate sources (S).
-        num_active:      How many sources emit signal.
-        seed:            Master seed.
-        sampling_rate:   Sampling rate in Hz.
-        duration:        Signal duration in seconds.
-        source_distance: Radius of the source ring (m).
-        mic_radius:      Radius of the mic arc (m).
-        angle_start:     Starting angle of the sector (rad).
-        angle_span:      Angular width of the sector (rad).
-        mode:            "noise" (white Gaussian) or "sine" (random sum-of-sines).
-        min_freq_hz:     Minimum frequency to include in the simulation (Hz).
-        sensor_snr_db:   SNR of the sensor noise (dB).
-        model_snr_db:    SNR of the model noise (dB).
-        amplitude:       Amplitude of the signals.
-    Returns:
-        Simulation dataclass.
-    """
-    return quick_sim(
-        num_mics=num_mics,
-        num_sources=num_sources,
-        num_active=num_active,
-        seed=seed,
-        sampling_rate=sampling_rate,
-        duration=duration,
-        source_distance=source_distance,
-        mic_radius=mic_radius,
-        array_type="arc",
-        angle_start=angle_start,
-        angle_span=angle_span,
-        mode=mode,
-        min_freq_hz=min_freq_hz,
-        sensor_snr_db=sensor_snr_db,
-        model_snr_db=model_snr_db,
-        inverse_method=inverse_method,
-        amplitude=amplitude,
-    )
-
-
-def quick_sector_frequency_sim(
-    num_mics: int,
-    num_sources: int,
-    num_active: int,
-    seed: int = 0,
-    sampling_rate: float = 2000.0,
-    duration: float = 0.05,
-    source_distance: float = 1.5,
-    mic_radius: float = 0.3,
-    angle_start: float = 0.0,
-    angle_span: float = np.pi / 2,
-    component_amplitude: float = 1.0,
-    magnitude_jitter: float = 0.0,
-    min_freq_hz: float | None = None,
-    sensor_snr_db: float | None = None,
-    model_snr_db: float | None = None,
-    inverse_method: str = "mp",
-) -> Simulation:
-    """
-    Sector version of quick_frequency_sim.
-    """
-    return quick_frequency_sim(
-        num_mics=num_mics,
-        num_sources=num_sources,
-        num_active=num_active,
-        seed=seed,
-        sampling_rate=sampling_rate,
-        duration=duration,
-        source_distance=source_distance,
-        mic_radius=mic_radius,
-        array_type="arc",
-        angle_start=angle_start,
-        angle_span=angle_span,
-        component_amplitude=component_amplitude,
-        magnitude_jitter=magnitude_jitter,
-        min_freq_hz=min_freq_hz,
         sensor_snr_db=sensor_snr_db,
         model_snr_db=model_snr_db,
         inverse_method=inverse_method,

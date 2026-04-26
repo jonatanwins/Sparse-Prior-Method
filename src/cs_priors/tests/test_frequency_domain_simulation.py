@@ -7,7 +7,7 @@ from ..simulation.mixing_model import (
     construct_geometry,
     generate_signals,
     quick_frequency_sim,
-    simulate,
+    simulate_from_time_domain,
     simulate_from_frequency_domain,
 )
 
@@ -113,7 +113,7 @@ def test_simulate_from_frequency_domain_matches_time_domain_path():
     x = np.array([src.time_series for src in sources_td])
     X = np.array(fft(x, axis=1))
 
-    sim_td = simulate(
+    sim_td = simulate_from_time_domain(
         mics=mics,
         sources=sources_td,
         active_indices=active,

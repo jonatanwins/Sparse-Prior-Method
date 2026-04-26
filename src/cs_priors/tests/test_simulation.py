@@ -17,7 +17,7 @@ from ..simulation.mixing_model import (
     select_active_sources,
     generate_signals,
     quick_sim,
-    simulate,
+    simulate_from_time_domain,
     moore_penrose_inverse,
     ridge_inverse,
 )
@@ -98,7 +98,7 @@ def _run(
             return np.ones_like(freqs, dtype=bool)
         return freqs >= min_freq_hz
 
-    return simulate(
+    return simulate_from_time_domain(
         mics=mics,
         sources=sources,
         active_indices=active,
@@ -140,7 +140,7 @@ def _run_square_exact() -> Simulation:
         rng=np.random.default_rng(0),
     )
 
-    return simulate(
+    return simulate_from_time_domain(
         mics=mics,
         sources=sources,
         active_indices=active,
