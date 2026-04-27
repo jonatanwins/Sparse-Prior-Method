@@ -166,3 +166,5 @@ temp.py
 .DS_Store
 .vscode/
 .codex/
+
+results/
