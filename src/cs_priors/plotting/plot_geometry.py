@@ -3,8 +3,10 @@ import numpy as np
 
 
 @typechecked
-def plot_sources(ax, sources, source_color: str = "dodgerblue"):
-    # Plot each source
+def plot_sources(ax, sources, source_color: str = "dodgerblue", active_indices=None):
+    active_indices = set(active_indices or [])
+    all_active = len(active_indices) == len(sources)
+
     for idx, src in enumerate(sources):
         sx, sy = src.get_position()
         ax.scatter(
@@ -14,17 +16,25 @@ def plot_sources(ax, sources, source_color: str = "dodgerblue"):
             marker="^",
             edgecolor="k",
             color=source_color,
-            label="Sources" if idx == 0 else None,
+            label="Sources" if idx == 0 and not all_active else None,
         )
         if src.label is not None:
-            # Annotate at the desired offset
-            ax.text(
-                sx + 0.05,
-                sy + 0.05,
-                src.label,
-                fontsize=8,
-                color=source_color,
-            )
+            ax.text(sx + 0.05, sy + 0.05, src.label, fontsize=8, color=source_color)
+
+
+@typechecked
+def plot_active_sources(ax, sources, active_indices, active_color="gold"):
+    for k, i in enumerate(active_indices or []):
+        sx, sy = sources[i].get_position()
+        ax.scatter(
+            sx,
+            sy,
+            s=80,
+            marker="^",
+            color=active_color,
+            edgecolor="k",
+            label="Active sources" if k == 0 else None,
+        )
 
 
 @typechecked
@@ -59,14 +69,18 @@ def plot_geometry_on_ax(
     walls: list | None = None,
     mic_color: str = "crimson",
     source_color: str = "dodgerblue",
+    active_color: str = "gold",
     pad_factor: float = 0.3,
+    active_indices=None,
 ):
     """
     Plot microphones, sources, and origin on the given Axes object.
     """
 
     plot_mics(ax, mics, mic_color=mic_color)
-    plot_sources(ax, sources, source_color=source_color)
+    plot_sources(ax, sources, source_color=source_color, active_indices=active_indices)
+    plot_active_sources(ax, sources, active_indices, active_color=active_color)
+
     if walls is not None:
         plot_walls(ax, walls, wall_color="gray")
 
@@ -106,19 +120,13 @@ def plot_sim_geometry(sim, dpi: int = 70, pad_factor: float = 0.2, show: bool = 
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(dpi=dpi)
-    plot_geometry_on_ax(ax, sim.mics, sim.sources, pad_factor=pad_factor)
-
-    for k, i in enumerate(sim.active_indices):
-        sx, sy = sim.sources[i].get_position()
-        ax.scatter(
-            sx,
-            sy,
-            s=80,
-            marker="^",
-            color="gold",
-            edgecolor="k",
-            label="Active sources" if k == 0 else None,
-        )
+    plot_geometry_on_ax(
+        ax,
+        sim.mics,
+        sim.sources,
+        pad_factor=pad_factor,
+        active_indices=sim.active_indices,
+    )
 
     ax.legend()
     if show:

@@ -5,7 +5,6 @@ from ..geometry.SoundSource import SoundSource
 from ..constants import SPEED_OF_SOUND
 from .Simulation import Simulation
 
-
 # ── 1. Geometry ──────────────────────────────────────────────────────────────
 
 
@@ -29,12 +28,10 @@ def construct_geometry(
     # 1. Microphones
     if array_type == "linear":
         mics = linear_array(num_mics, mic_radius)
-    elif array_type == "circular":
+    elif np.isclose(mic_angle_span, 2 * np.pi):
         mics = circular_array(num_mics, mic_radius)
-    elif array_type == "arc":
-        mics = arc_array(num_mics, mic_radius, mic_angle_start, mic_angle_span)
     else:
-        raise ValueError("array_type must be 'linear', 'circular', or 'arc'")
+        mics = arc_array(num_mics, mic_radius, mic_angle_start, mic_angle_span)
 
     # 2. Sources
     if num_sources == 1:
