@@ -10,14 +10,16 @@ import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "illustrations"
+DEFAULT_2D_PRIOR_WEIGHTS = (1.0, 1.0, 0.35)
 
 COLORS = {
     "objective": "#0072B2",
-    "solution": "#D55E00",
-    "x0": "#E60026",
+    "solution": "#FFC404",
+    "x0": "#FF0000",
+    "sparse": "#DD00FF",
     "true": "#009E73",
     "alt": "#CC79A7",
-    "plane": "#56B4E9",
+    "plane": "#FF6565",
     "text": "#222222",
     "grid": "#D8D8D8",
 }
@@ -31,6 +33,7 @@ class SparsePriorExample:
     x0: np.ndarray
     B: np.ndarray
     precisions: tuple[np.ndarray, ...]
+    prior_weights: tuple[float, ...]
     sparse_points: dict[str, np.ndarray]
     sparse_z: dict[str, np.ndarray | float]
 
@@ -62,24 +65,42 @@ def quad_form(points: np.ndarray, precision: np.ndarray) -> np.ndarray:
     return np.einsum("...i,ij,...j->...", points, precision, points)
 
 
-def prior_objective(points: np.ndarray, precisions: Iterable[np.ndarray]) -> np.ndarray:
+def prior_objective(
+    points: np.ndarray,
+    precisions: Iterable[np.ndarray],
+    weights: Iterable[float] | None = None,
+) -> np.ndarray:
     points = np.asarray(points, dtype=float)
+    precisions = tuple(precisions)
+    if weights is None:
+        weights = np.ones(len(precisions), dtype=float)
+    weights = np.asarray(tuple(weights), dtype=float)
+    if weights.shape != (len(precisions),):
+        raise ValueError(
+            f"Expected one prior weight per precision matrix, got {weights.size} "
+            f"weights for {len(precisions)} precision matrices."
+        )
+
     values = np.zeros(points.shape[:-1], dtype=float)
-    for precision in precisions:
-        values += np.exp(-quad_form(points, precision))
+    for weight, precision in zip(weights, precisions):
+        values += weight * np.exp(-quad_form(points, precision))
     return values
 
 
-def make_2d_example() -> SparsePriorExample:
+def make_2d_example(
+    prior_weights: Iterable[float] = DEFAULT_2D_PRIOR_WEIGHTS,
+) -> SparsePriorExample:
     x_true = np.array([0.0, 3.0])
     A = np.array([[1.0, 2.0]])
     y = np.array([6.0])
     x0 = np.linalg.pinv(A) @ y
     B = np.array([[-2.0], [1.0]])
     precisions = (
-        np.diag([10.0, 0.1]),
-        np.diag([0.1, 10.0]),
+        np.diag([5.0, 0.01]),
+        np.diag([0.01, 5.0]),
+        np.diag([0.01, 0.01]),
     )
+    prior_weights = tuple(float(weight) for weight in prior_weights)
     sparse_points = {
         r"$(0,3)^\top$": np.array([0.0, 3.0]),
         r"$(6,0)^\top$": np.array([6.0, 0.0]),
@@ -88,10 +109,14 @@ def make_2d_example() -> SparsePriorExample:
         r"$(0,3)^\top$": 0.6,
         r"$(6,0)^\top$": -2.4,
     }
-    return SparsePriorExample(x_true, A, y, x0, B, precisions, sparse_points, sparse_z)
+    return SparsePriorExample(
+        x_true, A, y, x0, B, precisions, prior_weights, sparse_points, sparse_z
+    )
 
 
-def make_3d_example() -> SparsePriorExample:
+def make_3d_example(
+    prior_weights: Iterable[float] = (1.0, 1.0, 1.0),
+) -> SparsePriorExample:
     x_true = np.array([0.0, 3.0, 0.0])
     A = np.array([[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]])
     y = np.array([3.0, 6.0])
@@ -102,6 +127,7 @@ def make_3d_example() -> SparsePriorExample:
         np.diag([0.005, 1.0, 0.005]),
         np.diag([0.005, 0.005, 1.0]),
     )
+    prior_weights = tuple(float(weight) for weight in prior_weights)
     sparse_points = {
         r"$(3,0,0)^\top$": np.array([3.0, 0.0, 0.0]),
         r"$(0,3,0)^\top$": np.array([0.0, 3.0, 0.0]),
@@ -112,7 +138,9 @@ def make_3d_example() -> SparsePriorExample:
         r"$(0,3,0)^\top$": np.array([2.0, -1.0]),
         r"$(0,0,3)^\top$": np.array([-1.0, 2.0]),
     }
-    return SparsePriorExample(x_true, A, y, x0, B, precisions, sparse_points, sparse_z)
+    return SparsePriorExample(
+        x_true, A, y, x0, B, precisions, prior_weights, sparse_points, sparse_z
+    )
 
 
 def validate_example(example: SparsePriorExample) -> None:
@@ -123,9 +151,14 @@ def validate_example(example: SparsePriorExample) -> None:
     for point in example.sparse_points.values():
         assert np.allclose(example.A @ point, example.y)
 
-    objective_at_x0 = prior_objective(example.x0, example.precisions)
+    objective_at_x0 = prior_objective(
+        example.x0, example.precisions, example.prior_weights
+    )
     for point in example.sparse_points.values():
-        assert prior_objective(point, example.precisions) > objective_at_x0
+        assert (
+            prior_objective(point, example.precisions, example.prior_weights)
+            > objective_at_x0
+        )
 
 
 def ensure_output_dir(output_dir: Path | str = DEFAULT_OUTPUT_DIR) -> Path:
@@ -147,93 +180,142 @@ def save_matplotlib_figure(fig: plt.Figure, output_dir: Path, stem: str) -> list
     return paths
 
 
+def _axis_values(
+    spec: tuple[float, float, int] | np.ndarray | list[float],
+) -> np.ndarray:
+    if isinstance(spec, tuple) and len(spec) == 3:
+        start, stop, count = spec
+        return np.linspace(float(start), float(stop), int(count))
+    return np.asarray(spec, dtype=float)
+
+
 def plot_2d_contour(
     output_dir: Path | str = DEFAULT_OUTPUT_DIR,
+    x1=(-0.6, 6.4, 560),
+    x2=(-0.6, 3.8, 460),
+    contour_scale: str = "line",
+    prior_weights: Iterable[float] | None = None,
+    contour_levels: Iterable[float] | None = None,
 ) -> tuple[plt.Figure, list[Path]]:
     configure_matplotlib()
-    example = make_2d_example()
+    example = make_2d_example(
+        prior_weights=(
+            prior_weights if prior_weights is not None else DEFAULT_2D_PRIOR_WEIGHTS
+        )
+    )
     validate_example(example)
     output_dir = ensure_output_dir(output_dir)
 
-    x1 = np.linspace(-0.6, 6.4, 560)
-    x2 = np.linspace(-0.6, 3.8, 460)
-    X1, X2 = np.meshgrid(x1, x2)
+    x1_values = _axis_values(x1)
+    x2_values = _axis_values(x2)
+    X1, X2 = np.meshgrid(x1_values, x2_values)
     points = np.stack([X1, X2], axis=-1)
-    objective = prior_objective(points, example.precisions)
+    objective = prior_objective(points, example.precisions, example.prior_weights)
 
-    fig, ax = plt.subplots(figsize=(5.2, 3.75), constrained_layout=True)
-    fill_levels = np.linspace(0.0, 1.6, 17)
-    cf = ax.contourf(X1, X2, objective, levels=fill_levels, cmap="Blues", alpha=0.92)
-    contour_levels = [0.025, 0.05, 0.1, 0.2, 0.4, 0.8, 1.2, 1.6]
-    ax.contour(
+    fig, ax = plt.subplots(figsize=(6.2, 5.0), constrained_layout=True)
+    max_objective = float(np.nanmax(objective))
+    if contour_levels is not None:
+        contour_levels = np.asarray(tuple(contour_levels), dtype=float)
+        contour_levels = np.unique(np.sort(contour_levels))
+        contour_levels = contour_levels[contour_levels < max_objective]
+    elif contour_scale == "line":
+        sparse_levels = [
+            float(prior_objective(point, example.precisions, example.prior_weights))
+            for point in example.sparse_points.values()
+        ]
+        contour_levels = np.array([0.02, *sparse_levels, 0.55, 1.6])
+        contour_levels = np.unique(np.round(contour_levels, decimals=10))
+        contour_levels = contour_levels[contour_levels < max_objective]
+    elif contour_scale == "log":
+        contour_levels = np.geomspace(
+            max(max_objective * 1e-3, 1e-6), max_objective * 0.9, 7
+        )
+    elif contour_scale == "linear":
+        contour_levels = np.linspace(max_objective * 0.08, max_objective * 0.9, 7)
+    else:
+        raise ValueError("contour_scale must be 'line', 'log', or 'linear'")
+    if contour_levels.size == 0:
+        raise ValueError("No contour levels remain below the maximum objective value.")
+    cs = ax.contour(
         X1,
         X2,
         objective,
         levels=contour_levels,
-        colors="#1A1A1A",
-        linewidths=0.45,
-        alpha=0.55,
+        cmap="viridis",
+        linewidths=0.8,
     )
+    ax.clabel(cs, levels=contour_levels[::2], inline=True, fontsize=7, fmt="%.2g")
 
-    z_line = np.linspace(-2.65, 0.85, 260)
+    z_candidates = []
+    for dim, values in enumerate((x1_values, x2_values)):
+        if not np.isclose(example.B[dim, 0], 0.0):
+            z_candidates.extend(
+                [
+                    (float(values.min()) - example.x0[dim]) / example.B[dim, 0],
+                    (float(values.max()) - example.x0[dim]) / example.B[dim, 0],
+                ]
+            )
+    z_line = np.linspace(min(z_candidates), max(z_candidates), 420)
     line_points = example.x0[None, :] + z_line[:, None] * example.B[:, 0][None, :]
     ax.plot(
         line_points[:, 0],
         line_points[:, 1],
         color=COLORS["solution"],
-        label=r"$x_0 + bz$",
+        label=r"$\mathbf{x}_0 + \mathbf{B}\mathbf{z}$",
         zorder=4,
     )
 
     ax.scatter(
         example.x0[0],
         example.x0[1],
-        s=58,
+        s=24,
         marker="o",
         color=COLORS["x0"],
-        edgecolor="white",
-        linewidth=0.8,
-        label=r"$x_0$",
+        edgecolor=COLORS["text"],
+        linewidth=0.35,
+        label=r"$\mathbf{x}_0$",
         zorder=6,
     )
-    ax.annotate(r"$x_0$", example.x0, xytext=(8, 8), textcoords="offset points")
 
-    marker_styles = [("true", "D"), ("alt", "s")]
-    for (label, point), (color_key, marker) in zip(
+    marker_styles = [
+        ("sparse", "o", "sparse solutions"),
+        ("sparse", "o", "_nolegend_"),
+    ]
+    for (label, point), (color_key, marker, legend_label) in zip(
         example.sparse_points.items(), marker_styles
     ):
         ax.scatter(
             point[0],
             point[1],
-            s=70,
+            s=28,
             marker=marker,
             color=COLORS[color_key],
-            edgecolor="white",
-            linewidth=0.8,
-            label=label,
+            edgecolor=COLORS["text"],
+            linewidth=0.35,
+            label=legend_label,
             zorder=7,
         )
 
-    ax.annotate(
-        r"true sparse solution",
-        (0.0, 3.0),
-        xytext=(12, -14),
-        textcoords="offset points",
-    )
-    ax.annotate(
-        r"alternative sparse solution",
-        (6.0, 0.0),
-        xytext=(-116, 12),
-        textcoords="offset points",
-    )
     ax.set_xlabel(r"$x_1$")
     ax.set_ylabel(r"$x_2$")
-    ax.set_xlim(-0.6, 6.4)
-    ax.set_ylim(-0.6, 3.8)
+    ax.set_title(
+        r"Sum of two bivariate Gaussians with solution line for $\mathbf{y} = \mathbf{A}\mathbf{x}$",
+        fontsize=12,
+        pad=8,
+    )
+    ax.set_xlim(float(x1_values.min()), float(x1_values.max()))
+    ax.set_ylim(float(x2_values.min()), float(x2_values.max()))
     ax.set_aspect("equal", adjustable="box")
-    ax.legend(loc="upper right", frameon=True, framealpha=0.94)
-    colorbar = fig.colorbar(cf, ax=ax, pad=0.02, shrink=0.92)
-    colorbar.set_label(r"$P(x)$")
+    ax.legend(
+        loc="upper right",
+        frameon=True,
+        framealpha=0.94,
+        fontsize=8,
+        borderpad=0.35,
+        labelspacing=0.35,
+        handlelength=1.7,
+        handletextpad=0.55,
+    )
 
     paths = save_matplotlib_figure(fig, output_dir, "sparse_prior_2d_contour")
     return fig, paths
@@ -241,15 +323,20 @@ def plot_2d_contour(
 
 def plot_2d_profile(
     output_dir: Path | str = DEFAULT_OUTPUT_DIR,
+    prior_weights: Iterable[float] | None = None,
 ) -> tuple[plt.Figure, list[Path]]:
     configure_matplotlib()
-    example = make_2d_example()
+    example = make_2d_example(
+        prior_weights=(
+            prior_weights if prior_weights is not None else DEFAULT_2D_PRIOR_WEIGHTS
+        )
+    )
     validate_example(example)
     output_dir = ensure_output_dir(output_dir)
 
     z = np.linspace(-3.0, 1.15, 700)
     line_points = example.x0[None, :] + z[:, None] * example.B[:, 0][None, :]
-    objective = prior_objective(line_points, example.precisions)
+    objective = prior_objective(line_points, example.precisions, example.prior_weights)
 
     fig, ax = plt.subplots(figsize=(5.2, 2.75), constrained_layout=True)
     ax.plot(z, objective, color=COLORS["objective"])
@@ -264,7 +351,9 @@ def plot_2d_profile(
     ]
     for z_value, label, color, marker in markers:
         value = prior_objective(
-            example.x0 + example.B[:, 0] * z_value, example.precisions
+            example.x0 + example.B[:, 0] * z_value,
+            example.precisions,
+            example.prior_weights,
         )
         ax.scatter(
             z_value,
@@ -300,7 +389,7 @@ def plot_3d_unrolled(
     Z1, Z2 = np.meshgrid(z1, z2)
     z_grid = np.stack([Z1, Z2], axis=-1)
     plane_points = example.x0 + np.einsum("ij,...j->...i", example.B, z_grid)
-    objective = prior_objective(plane_points, example.precisions)
+    objective = prior_objective(plane_points, example.precisions, example.prior_weights)
 
     fig, ax = plt.subplots(figsize=(5.1, 4.25), constrained_layout=True)
     levels = np.linspace(0.65, 1.95, 18)
@@ -391,7 +480,7 @@ def render_3d_isosurface(
     axis = np.linspace(lower, upper, grid_size)
     X1, X2, X3 = np.meshgrid(axis, axis, axis, indexing="ij")
     points = np.stack([X1, X2, X3], axis=-1)
-    objective = prior_objective(points, example.precisions)
+    objective = prior_objective(points, example.precisions, example.prior_weights)
 
     grid = pv.ImageData()
     grid.dimensions = objective.shape
@@ -658,10 +747,14 @@ if __name__ == "__main__":
 
         lower, upper = -5, 5
         grid_size = 140
-        iso_value = 1.2
+        iso_value = 1.8
         axis = np.linspace(lower, upper, grid_size)
         X1, X2, X3 = np.meshgrid(axis, axis, axis, indexing="ij")
-        objective = prior_objective(np.stack([X1, X2, X3], axis=-1), example.precisions)
+        objective = prior_objective(
+            np.stack([X1, X2, X3], axis=-1),
+            example.precisions,
+            example.prior_weights,
+        )
 
         grid = pv.ImageData()
         grid.dimensions = objective.shape
@@ -672,7 +765,7 @@ if __name__ == "__main__":
         isosurface = grid.contour([iso_value], scalars="P")
         # simplex_vertices = np.array(list(example.sparse_points.values()), dtype=float)
         # simplex = pv.PolyData(simplex_vertices, np.hstack([[3, 0, 1, 2]]))
-        plane_reach = 3.5  # trial-and-error knob: larger means wider plane
+        plane_reach = 2.5  # trial-and-error knob: larger means wider plane
 
         z_corners = np.array(
             [
@@ -693,13 +786,13 @@ if __name__ == "__main__":
             isosurface,
             color="#00B277",  # blue: prior isosurface
             opacity=1,
-            smooth_shading=True,
+            smooth_shading=False,
         )
 
         plotter.add_mesh(
             solution_plane,
-            color="#E69F00",
-            opacity=0.5,
+            color=COLORS["plane"],  # red: solution plane
+            opacity=0.6,
             show_edges=True,
             edge_color="#222222",
         )
@@ -709,7 +802,7 @@ if __name__ == "__main__":
         plotter.add_points(
             sparse_vertices,
             color=COLORS["true"],
-            point_size=16,
+            point_size=25,
             render_points_as_spheres=True,
         )
 
@@ -730,7 +823,7 @@ if __name__ == "__main__":
         plotter.add_points(
             example.x0.reshape(1, 3),
             color=COLORS["x0"],
-            point_size=18,
+            point_size=25,
             render_points_as_spheres=True,
         )
         # plotter.show_bounds(

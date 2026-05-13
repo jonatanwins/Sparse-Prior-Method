@@ -1,5 +1,7 @@
 from typeguard import typechecked
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 
 @typechecked
@@ -61,6 +63,61 @@ def plot_walls(ax, walls, wall_color="gray"):
         ax.plot([wall.p1[0], wall.p2[0]], [wall.p1[1], wall.p2[1]], color=wall_color)
 
 
+# @typechecked
+# def plot_geometry_on_ax(
+#     ax,
+#     mics: np.ndarray,
+#     sources,
+#     walls: list | None = None,
+#     mic_color: str = "crimson",
+#     source_color: str = "dodgerblue",
+#     active_color: str = "gold",
+#     pad_factor: float = 0.3,
+#     active_indices=None,
+# ):
+#     """
+#     Plot microphones, sources, and origin on the given Axes object.
+#     """
+
+#     plot_mics(ax, mics, mic_color=mic_color)
+#     plot_sources(ax, sources, source_color=source_color, active_indices=active_indices)
+#     plot_active_sources(ax, sources, active_indices, active_color=active_color)
+
+#     if walls is not None:
+#         plot_walls(ax, walls, wall_color="gray")
+
+#     ax.set_title("Microphone Array & Sound Sources")
+#     ax.set_xlabel(f"X Position (m)")
+#     ax.set_ylabel(f"Y Position (m)")
+#     # ax.axis("equal")  # This causes problems with xlim and ylim
+#     ax.grid(True)
+#     ax.legend()
+
+#     # ----------------------------
+#     # 2) Compute auto-limits for x and y
+#     # ----------------------------
+#     # Collect all x, all y: mics, sources, origin
+#     mic_and_src_x = np.concatenate(
+#         [mics[:, 0], np.array([src.get_position()[0] for src in sources]), [0.0]]
+#     )
+#     mic_and_src_y = np.concatenate(
+#         [mics[:, 1], np.array([src.get_position()[1] for src in sources]), [0.0]]
+#     )
+
+#     x_min, x_max = mic_and_src_x.min(), mic_and_src_x.max()
+#     y_min, y_max = mic_and_src_y.min(), mic_and_src_y.max()
+
+#     # Determine required span to make the plot square
+#     x_span = x_max - x_min
+#     y_span = y_max - y_min
+#     max_span = max(x_span, y_span)
+
+
+#     # Pad by pad_factor * 100%
+#     lower_bound = min(x_min, y_min) - pad_factor * max_span
+#     upper_bound = max(x_max, y_max) + pad_factor * max_span
+#     ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
+#     ax.set_aspect("equal", adjustable="box")
 @typechecked
 def plot_geometry_on_ax(
     ax,
@@ -72,10 +129,10 @@ def plot_geometry_on_ax(
     active_color: str = "gold",
     pad_factor: float = 0.3,
     active_indices=None,
+    view_limits: tuple[tuple[float, float], tuple[float, float]] | None = None,
+    grid_step: float | None = None,
 ):
-    """
-    Plot microphones, sources, and origin on the given Axes object.
-    """
+    """Plot microphones, sources, and origin on the given Axes object."""
 
     plot_mics(ax, mics, mic_color=mic_color)
     plot_sources(ax, sources, source_color=source_color, active_indices=active_indices)
@@ -87,46 +144,69 @@ def plot_geometry_on_ax(
     ax.set_title("Microphone Array & Sound Sources")
     ax.set_xlabel("X Position (m)")
     ax.set_ylabel("Y Position (m)")
-    # ax.axis("equal")  # This causes problems with xlim and ylim
     ax.grid(True)
     ax.legend()
 
-    # ----------------------------
-    # 2) Compute auto-limits for x and y
-    # ----------------------------
-    # Collect all x, all y: mics, sources, origin
-    mic_and_src_x = np.concatenate(
-        [mics[:, 0], np.array([src.get_position()[0] for src in sources]), [0.0]]
-    )
-    mic_and_src_y = np.concatenate(
-        [mics[:, 1], np.array([src.get_position()[1] for src in sources]), [0.0]]
-    )
+    if view_limits is None:
+        x = np.concatenate(
+            [mics[:, 0], [src.get_position()[0] for src in sources], [0.0]]
+        )
+        y = np.concatenate(
+            [mics[:, 1], [src.get_position()[1] for src in sources], [0.0]]
+        )
 
-    x_min, x_max = mic_and_src_x.min(), mic_and_src_x.max()
-    y_min, y_max = mic_and_src_y.min(), mic_and_src_y.max()
+        span = max(x.max() - x.min(), y.max() - y.min())
+        lower = min(x.min(), y.min()) - pad_factor * span
+        upper = max(x.max(), y.max()) + pad_factor * span
 
-    # Determine required span to make the plot square
-    x_span = x_max - x_min
-    y_span = y_max - y_min
-    max_span = max(x_span, y_span)
+        ax.set(xlim=(lower, upper), ylim=(lower, upper))
+    else:
+        ax.set(xlim=view_limits[0], ylim=view_limits[1])
 
-    # Pad by pad_factor * 100%
-    lower_bound = min(x_min, y_min) - pad_factor * max_span
-    upper_bound = max(x_max, y_max) + pad_factor * max_span
-    ax.set(xlim=(lower_bound, upper_bound), ylim=(lower_bound, upper_bound))
+    if grid_step is not None:
+        ax.xaxis.set_major_locator(MultipleLocator(grid_step))
+        ax.yaxis.set_major_locator(MultipleLocator(grid_step))
+
+    ax.set_aspect("equal", adjustable="box")
 
 
-def plot_sim_geometry(sim, dpi: int = 70, pad_factor: float = 0.2, show: bool = True):
-    import matplotlib.pyplot as plt
+def plot_sim_geometry(
+    sim,
+    dpi: int = 70,
+    pad_factor: float = 0.2,
+    show: bool = True,
+    unit: str = "m",
+    view_limits: tuple[tuple[float, float], tuple[float, float]] | None = None,
+    grid_step: float | None = None,
+):
 
-    fig, ax = plt.subplots(dpi=dpi)
+    figsize = None
+    if view_limits is not None:
+        (x0, x1), (y0, y1) = view_limits
+        figsize = (6, 6 * (y1 - y0) / (x1 - x0))
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
     plot_geometry_on_ax(
         ax,
         sim.mics,
         sim.sources,
         pad_factor=pad_factor,
         active_indices=sim.active_indices,
+        view_limits=view_limits,
+        grid_step=grid_step,
     )
+
+    if unit == "cm":
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{100 * x:g}"))
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{100 * y:g}"))
+        ax.set_xlabel("X Position (cm)")
+        ax.set_ylabel("Y Position (cm)")
+    elif unit == "mm":
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{1000 * x:g}"))
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{1000 * y:g}"))
+        ax.set_xlabel("X Position (mm)")
+        ax.set_ylabel("Y Position (mm)")
 
     ax.legend()
     if show:
