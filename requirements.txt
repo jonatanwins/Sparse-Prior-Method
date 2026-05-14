@@ -3,11 +3,13 @@ scipy==1.15.2
 matplotlib==3.10.1
 pandas==2.3.3
 seaborn==0.13.2
-scikit-learn==1.5.2 # groupyr is incomaptible with scikit-learn 1.6 and above
+scikit-learn==1.5.2  # groupyr is incompatible with scikit-learn 1.6 and above
 group-lasso==1.5.0
 groupyr==0.3.4
 joblib==1.4.2
 typeguard==4.4.4
+tqdm==4.67.3
 pytest==9.0.2
-ipykernel==6.29.3
-nbformat
+ipykernel==6.29.5
+nbformat==5.10.4
+pyvista==0.48.0 # optional, only needed for the surface viewer notebook

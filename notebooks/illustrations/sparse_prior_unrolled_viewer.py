@@ -22,7 +22,7 @@ from sparse_prior_visuals import (
     validate_example,
 )
 
-DEFAULT_CASE = ["grouped", "thesis"][1]
+DEFAULT_CASE = ["grouped", "thesis"][0]
 DEFAULT_Z1_BOUNDS = (-2.6, 3.2)
 DEFAULT_Z2_BOUNDS = (-2.6, 3.2)
 DEFAULT_GRID_SIZE = 260
@@ -31,12 +31,16 @@ DEFAULT_CONTOUR_OFFSET = -0.5
 DEFAULT_SURFACE_ALPHA = 0.82
 DEFAULT_MARKER_LIFT = 0.025
 DEFAULT_ELEV = 10.0
-DEFAULT_AZIM = -26.0
+DEFAULT_AZIM = -20.0
 DEFAULT_BOX_ASPECT = (1.0, 1.0, 1.0)
 DEFAULT_GROUPED_WEIGHTS = (1.0, 1.0)
 DEFAULT_THESIS_WEIGHTS = (1.0, 1.0, 1.0)
 DEFAULT_SHOW_CONTOURS = True
 DEFAULT_SHOW_GUIDES = True
+DEFAULT_SHOW_CONTOUR_MARKERS = True
+DEFAULT_SHOW_FLOOR_PLANE = True
+DEFAULT_FLOOR_PLANE_ALPHA = 0.4
+DEFAULT_FLOOR_PLANE_COLOR = "#E69F00"
 
 
 @dataclass(frozen=True)
@@ -148,11 +152,17 @@ def build_unrolled_view(
     box_aspect: tuple[float, float, float] = DEFAULT_BOX_ASPECT,
     show_contours: bool = DEFAULT_SHOW_CONTOURS,
     show_guides: bool = DEFAULT_SHOW_GUIDES,
+    show_contour_markers: bool = DEFAULT_SHOW_CONTOUR_MARKERS,
+    show_floor_plane: bool = DEFAULT_SHOW_FLOOR_PLANE,
+    floor_plane_alpha: float = DEFAULT_FLOOR_PLANE_ALPHA,
+    floor_plane_color: str = DEFAULT_FLOOR_PLANE_COLOR,
 ) -> tuple[plt.Figure, UnrolledObjectiveData]:
     if contours < 1:
         raise ValueError("contours must be at least 1.")
     if not 0.0 <= surface_alpha <= 1.0:
         raise ValueError("surface_alpha must be between 0 and 1.")
+    if not 0.0 <= floor_plane_alpha <= 1.0:
+        raise ValueError("floor_plane_alpha must be between 0 and 1.")
 
     configure_matplotlib()
     example = make_example(case, weights)
@@ -173,6 +183,17 @@ def build_unrolled_view(
         ccount=surface_resolution,
     )
 
+    if show_floor_plane:
+        ax.plot_surface(
+            data.Z1,
+            data.Z2,
+            np.full_like(data.Z1, contour_offset),
+            color=floor_plane_color,
+            alpha=floor_plane_alpha,
+            linewidth=0,
+            shade=False,
+        )
+
     if show_contours:
         ax.contour(
             data.Z1,
@@ -188,6 +209,7 @@ def build_unrolled_view(
     x0_z = np.array([0.0, 0.0])
     x0_value = _point_value(example, x0_z)
     x0_plot_value = x0_value + marker_lift
+    draw_contour_markers = show_contours and show_contour_markers
     ax.scatter(
         x0_z[0],
         x0_z[1],
@@ -199,6 +221,18 @@ def build_unrolled_view(
         label=r"$\mathbf{x}_0$",
         depthshade=False,
     )
+    if draw_contour_markers:
+        ax.scatter(
+            x0_z[0],
+            x0_z[1],
+            contour_offset,
+            s=32,
+            color=COLORS["x0"],
+            edgecolor=COLORS["text"],
+            linewidth=0.45,
+            label="_nolegend_",
+            depthshade=False,
+        )
 
     sparse_label_used = False
     for label, z_value in example.sparse_z.items():
@@ -225,6 +259,18 @@ def build_unrolled_view(
             fontsize=8,
         )
         sparse_label_used = True
+        if draw_contour_markers:
+            ax.scatter(
+                z_value[0],
+                z_value[1],
+                contour_offset,
+                s=30,
+                color=COLORS["sparse"],
+                edgecolor=COLORS["text"],
+                linewidth=0.4,
+                label="_nolegend_",
+                depthshade=False,
+            )
         if show_guides:
             ax.plot(
                 [z_value[0], z_value[0]],
@@ -257,7 +303,7 @@ def build_unrolled_view(
     ax.set_zlabel(r"$P(\mathbf{x}_0 + \mathbf{B}\mathbf{z})$")
     ax.set_xlim(*z1_bounds)
     ax.set_ylim(*z2_bounds)
-    z_lower = contour_offset if show_contours else 0.0
+    z_lower = contour_offset if show_contours or show_floor_plane else 0.0
     ax.set_zlim(z_lower, float(np.nanmax(data.objective)) * 1.05)
     ax.set_box_aspect(box_aspect)
     ax.view_init(elev=elev, azim=azim)
@@ -281,6 +327,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--contours", type=int, default=DEFAULT_CONTOURS)
     parser.add_argument("--offset", type=float, default=DEFAULT_CONTOUR_OFFSET)
     parser.add_argument("--surface-alpha", type=float, default=DEFAULT_SURFACE_ALPHA)
+    parser.add_argument(
+        "--floor-plane-alpha",
+        type=float,
+        default=DEFAULT_FLOOR_PLANE_ALPHA,
+        help="Opacity of the orange solution-plane floor.",
+    )
     parser.add_argument(
         "--marker-lift",
         type=float,
@@ -309,6 +361,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="show_guides",
         help="Hide vertical guide lines from markers to the contour floor.",
     )
+    parser.add_argument(
+        "--hide-contour-markers",
+        action="store_false",
+        dest="show_contour_markers",
+        help="Hide projected x0 and sparse markers on the contour floor.",
+    )
+    parser.add_argument(
+        "--hide-floor-plane",
+        action="store_false",
+        dest="show_floor_plane",
+        help="Hide the semi-transparent orange solution-plane floor.",
+    )
     parser.add_argument("--save", type=Path)
     parser.add_argument(
         "--no-show",
@@ -318,6 +382,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.set_defaults(
         show_contours=DEFAULT_SHOW_CONTOURS,
         show_guides=DEFAULT_SHOW_GUIDES,
+        show_contour_markers=DEFAULT_SHOW_CONTOUR_MARKERS,
+        show_floor_plane=DEFAULT_SHOW_FLOOR_PLANE,
     )
     return parser.parse_args(argv)
 
@@ -342,6 +408,9 @@ def main(argv: list[str] | None = None) -> int:
         box_aspect=tuple(args.box_aspect),
         show_contours=args.show_contours,
         show_guides=args.show_guides,
+        show_contour_markers=args.show_contour_markers,
+        show_floor_plane=args.show_floor_plane,
+        floor_plane_alpha=args.floor_plane_alpha,
     )
 
     if args.save is not None:
