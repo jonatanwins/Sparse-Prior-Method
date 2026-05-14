@@ -1,4 +1,4 @@
-# Compressed Sensing With Priors
+# The Sparse Prior Method
 
 This repository contains the code, notebooks, and generated figures used for a
 thesis project on sparse source recovery in underdetermined microphone-array
