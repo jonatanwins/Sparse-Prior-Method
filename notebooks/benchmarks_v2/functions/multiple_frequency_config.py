@@ -34,6 +34,14 @@ ALL_METHOD_ORDER = METHOD_ORDER + [
 
 METHOD_COLORS = {k: v["color"] for k, v in METHOD_STYLES.items()}
 METHOD_LINESTYLES = {k: v["linestyle"] for k, v in METHOD_STYLES.items()}
+METHOD_LABELS = {
+    "MP": "Moore-Penrose",
+    "LASSO": "LASSO",
+    "Group LASSO, no groups": "Group LASSO, no groups",
+    "Group LASSO, frequency groups": "Group LASSO, frequency groups",
+    "Sparse Prior, no groups": "Sparse Prior, no groups",
+    "Sparse Prior, frequency groups": "Sparse Prior, frequency groups",
+}
 
 
 def base_sim_kwargs():

@@ -39,7 +39,7 @@ METHOD_STYLE = {
         "linestyle": "--",
     },
     "MP": {
-        "label": "MP pseudoinverse",
+        "label": "Moore-Penrose",
         "color": "tab:blue",
         "linestyle": ":",
     },
@@ -60,7 +60,7 @@ METHOD_STYLE = {
         "linestyle": "-",
     },
     "X_pinv": {
-        "label": r"Initializer $\boldsymbol{x}_0$",
+        "label": "Moore-Penrose",
         "color": "tab:blue",
         "linestyle": ":",
     },

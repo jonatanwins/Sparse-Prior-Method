@@ -24,7 +24,7 @@ DEFAULT_LINESTYLES = {
 METHOD_LABELS = {
     "r-LASSO": "LASSO",
     "Sparse Prior": "Sparse Prior",
-    "X_pinv": r"Initializer $\boldsymbol{x}_0$",
+    "X_pinv": "Moore-Penrose",
 }
 
 METHOD_ORDER = ["Sparse Prior", "r-LASSO", "X_pinv"]
